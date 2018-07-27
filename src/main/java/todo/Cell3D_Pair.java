@@ -41,12 +41,6 @@ public class Cell3D_Pair implements Comparable<Cell3D_Pair>
 	}
 
 
-	public boolean touchingNeighbours()
-	{
-		return this.touchingNeighbors;
-	}
-
-
 	@Override
 	public int compareTo(final Cell3D_Pair pair)
 	{
@@ -133,25 +127,25 @@ public class Cell3D_Pair implements Comparable<Cell3D_Pair>
 	 */
 	public String getCandidateGroupsToString()
 	{
-		String list = "CandidateGroups: ";
+		final StringBuilder list = new StringBuilder("CandidateGroups: ");
 
 		for (int i = 0; i < this.candidateGroups.size(); i++)
 		{
-			list = list + this.candidateGroups.get(i) + " ";
+			list.append(this.candidateGroups.get(i) + " ");
 		}
-		list = list + " CandidateGroups Nucleus1: ";
+		list.append(" CandidateGroups Nucleus1: ");
 
 		for (int i = 0; i < this.candidateGroupsNucleus1.size(); i++)
 		{
-			list = list + this.candidateGroupsNucleus1.get(i) + " ";
+			list.append(this.candidateGroupsNucleus1.get(i) + " ");
 		}
-		list = list + " CandidateGroups Nucleus2: ";
+		list.append(" CandidateGroups Nucleus2: ");
 
 		for (int i = 0; i < this.candidateGroupsNucleus2.size(); i++)
 		{
-			list = list + this.candidateGroupsNucleus2.get(i) + " ";
+			list.append(this.candidateGroupsNucleus2.get(i) + " ");
 		}
-		return list;
+		return list.toString();
 	}
 
 
@@ -212,5 +206,11 @@ public class Cell3D_Pair implements Comparable<Cell3D_Pair>
 	{
 		this.candidateGroupsNucleus2.add(number);
 		this.candidateGroups.add(number);
+	}
+
+
+	public boolean touchingNeighbours()
+	{
+		return this.touchingNeighbors;
 	}
 }

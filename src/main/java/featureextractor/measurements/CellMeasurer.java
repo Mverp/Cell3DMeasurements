@@ -1,7 +1,10 @@
 package featureextractor.measurements;
 
+import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -13,10 +16,17 @@ import data.Coordinates;
 import data.Nucleus3D;
 import data.SegmentMeasurements;
 import featureextractor.Feature_Extractor_3D;
+import featureextractor.Labeled_Coordinate;
+import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
+import ij.gui.Toolbar;
 import ij.measure.Calibration;
+import ij.plugin.ImageCalculator;
+import ij.process.AutoThresholder;
+import ij.process.AutoThresholder.Method;
 import ij.process.ImageProcessor;
+import ij.process.ImageStatistics;
 import utils.Measurer;
 
 /**
@@ -35,6 +45,7 @@ public class CellMeasurer
 	}
 
 	private static final int EXTRA_SIGNAL_RADIUS = 10;
+	private static final int NUCLEUS_SURROUNDING_SIZE = 2;
 
 
 	/**
@@ -63,6 +74,89 @@ public class CellMeasurer
 			aTouchingNeighbourLabelList.add(label);
 		}
 	}
+
+
+	private static List<Coordinates> computeNucleusSurrounding(final List<Coordinates> aOutline, final int aLabel, final ImagePlus aDAPILabelImage, final ImagePlus aActinLabelImage,
+			final double aZFActor)
+	{
+		final ImageStack dapiImageStack = aDAPILabelImage.getImageStack();
+		final ImageStack actinImageStack = aActinLabelImage.getImageStack();
+		final List<Coordinates> surroundings = new ArrayList<>();
+		final HashSet<Coordinates> handledCoordinates = new HashSet<>();
+		final int zEdge = (int) (NUCLEUS_SURROUNDING_SIZE / aZFActor);
+		final double zFactorPow = aZFActor * aZFActor;
+		final int nucSurroundPow = NUCLEUS_SURROUNDING_SIZE * NUCLEUS_SURROUNDING_SIZE * NUCLEUS_SURROUNDING_SIZE;
+
+		// For each outline Coordinate of one nucleus determine the position of the coordinate
+		for (final Coordinates coordinate : aOutline)
+		{
+			final int xValue = (int) coordinate.getXcoordinate();
+			final int yValue = (int) coordinate.getYcoordinate();
+			final int zValue = (int) coordinate.getZcoordinate();
+			final int currentLabel = (int) actinImageStack.getVoxel(xValue, yValue, zValue);
+			if (currentLabel == aLabel)
+			{// If this pixel have the same value as the nucleus
+				for (int xStep = -NUCLEUS_SURROUNDING_SIZE; xStep <= NUCLEUS_SURROUNDING_SIZE; xStep++)
+				{
+					final int curX = xValue + xStep;
+					if (curX >= 0 && curX < aDAPILabelImage.getWidth())
+					{
+						for (int yStep = -NUCLEUS_SURROUNDING_SIZE; yStep <= NUCLEUS_SURROUNDING_SIZE; yStep++)
+						{
+							final int curY = yValue + yStep;
+							if (curY >= 0 && curY < aDAPILabelImage.getHeight())
+							{
+								for (int zStep = -zEdge; zStep <= zEdge; zStep++)
+								{
+									final int curZ = zValue + zStep;
+									if (curZ >= 0 && curZ < aDAPILabelImage.getNSlices())
+									{
+										if ((xStep * xStep) + (yStep * yStep) + ((int) (zStep * zStep * zFactorPow)) <= nucSurroundPow)
+										{
+
+											final Coordinates curCoord = new Coordinates(curX, curY, curZ);
+											if (!handledCoordinates.contains(curCoord))
+											{
+												if (dapiImageStack.getVoxel(curX, curY, curZ) == 0 && actinImageStack.getVoxel(curX, curY, curZ) != 0) // Not in a nucleus, but still in a cell
+												{
+													surroundings.add(curCoord);
+												}
+												handledCoordinates.add(curCoord);
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return surroundings;
+	}
+
+	// final Coordinates curCoord = new Coordinates(xValue, curY, zValue);
+	// if (!handledCoordinates.contains(curCoord))
+	// {
+	// if (dapiImageStack.getVoxel(xValue, curY, zValue) == 0 && actinImageStack.getVoxel(xValue, curY, zValue) != 0) // Not in a nucleus, but still in a cell
+	// {
+	// surroundings.add(curCoord);
+	// }
+	// handledCoordinates.add(curCoord);
+	// }
+	// }
+	// }
+	//
+	// final Coordinates curCoord = new Coordinates(xValue, yValue, curZ);
+	// if (!handledCoordinates.contains(curCoord))
+	// {
+	// if (dapiImageStack.getVoxel(xValue, yValue, curZ) == 0 && actinImageStack.getVoxel(xValue, yValue, curZ) != 0) // Not in a nucleus, but still in a cell
+	// {
+	// surroundings.add(curCoord);
+	// }
+	// handledCoordinates.add(curCoord);
+	// }
+	// }
 
 
 	/**
@@ -321,7 +415,91 @@ public class CellMeasurer
 
 
 	/**
-	 * Initialize the measurements by reading the input (grayscale) image and its corresponding labels.
+	 * Get a measure of the background intensity of the signal image. The background is defined as any part of the image that is not covered by the segmented image. The background measure is the median of the background intensity values excluding any
+	 * higher outliers.
+	 *
+	 * @param aSignalImage
+	 *            The image of the signal to be measured
+	 * @param aSegmentImage
+	 *            The image containing the foreground segments
+	 *
+	 * @return A value for an average background intensity of the signal image per slice.
+	 */
+	private static List<Double> getBackgroundIntensity(final ImagePlus aSignalImage, final ImagePlus aSegmentImage)
+	{
+		final List<Double> backgrounds = new ArrayList<>();
+
+		final ImageStack actinStack = aSegmentImage.getStack();
+		final ImagePlus signalImage = aSignalImage.duplicate();
+		final ImageStack signalStack = signalImage.getStack();
+		final List<Integer> numberOfNulledVoxels = new ArrayList<>();
+		// Create an image stack in which all segments from the segment image are removed (set to 0)
+		for (int z = 0; z < aSignalImage.getNSlices(); z++)
+		{
+			int nullVoxels = 0;
+			for (int x = 0; x < aSignalImage.getWidth(); x++)
+			{
+				for (int y = 0; y < aSignalImage.getHeight(); y++)
+				{
+					if (actinStack.getVoxel(x, y, z) > 0)
+					{
+						// IJ.log("" + x + ":" + y + ":" + z);
+						signalStack.setVoxel(x, y, z, 0);
+						nullVoxels++;
+					}
+				}
+			}
+			// Remember the number of nulled voxels per slice as we need to remove them from the histogram
+			numberOfNulledVoxels.add(nullVoxels);
+		}
+
+		// Get a good background indication per slice
+		for (int z = 1; z <= aSignalImage.getNSlices(); z++)
+		{
+			// Create the background histogram
+			final ImageStatistics stats = ImageStatistics.getStatistics(signalStack.getProcessor(z), 0, signalImage.getCalibration());
+			final AutoThresholder thresh = new AutoThresholder();
+			final int[] histo = Arrays.stream(stats.getHistogram()).mapToInt((l) -> (int) l).toArray();
+			histo[0] = histo[0] - numberOfNulledVoxels.get(z - 1); // Subtract any non-background pixels from the histogram
+
+			// Use the Triangle threshold method to get rid of the high intensity outliers
+			double backgroundBin = thresh.getThreshold(Method.Triangle, histo);
+			int totValues = 0;
+			for (int bin = 0; bin < backgroundBin; bin++)
+			{
+				totValues += histo[bin];
+			}
+			totValues /= 2; // Get median position
+			for (int bin = 0; bin < backgroundBin; bin++)
+			{
+				totValues -= histo[bin];
+				if (totValues <= 0)
+				{
+					// Median is in this bin
+					backgroundBin = bin;
+				}
+			}
+			double histoBinSize = aSignalImage.getProcessor().getHistogramSize();
+			histoBinSize = Math.pow(2, aSignalImage.getBitDepth()) / histoBinSize; // ie total number of intensity values / total number of buckets
+
+			if (histoBinSize != 1)
+			{
+				// If not 1 bucket per intensity step, take the middle value of the bin
+				backgroundBin = ((backgroundBin * histoBinSize) + ((backgroundBin + 1) * histoBinSize)) / 2;
+			}
+
+			backgrounds.add(backgroundBin);
+		}
+
+		signalImage.changes = false;
+		signalImage.close();
+
+		return backgrounds;
+	}
+
+
+	/**
+	 * Initialize the measurements by reading the input (gray scale) image and its corresponding labels.
 	 *
 	 * @param inputImage
 	 *            input (grayscale) image
@@ -329,7 +507,7 @@ public class CellMeasurer
 	 *            label image (labels are positive integer values)
 	 */
 	public static Cell3D[] getMeasuredCells(final ImagePlus aDAPIInputImage, final ImagePlus aActinInputImage, final ImagePlus aDAPILabelImage, final ImagePlus aActinLabelImage,
-			final boolean[] aCalculateDams, final boolean[] aParticleMeasure, final boolean[] aMCIB3DMeasurementSet)
+			final List<Labeled_Coordinate> aLabeledSeeds, final boolean[] aCalculateDams)
 	{
 		// TODO Why does the label image need to be a array and when does it contain 2 channels and when not?
 
@@ -342,36 +520,81 @@ public class CellMeasurer
 		}
 
 		final VoxelData dapiData = determineVoxelLocationAndintensity(aDAPIInputImage, aDAPILabelImage, labels, labelIndices);
-		VoxelData actinData = new VoxelData();
+		final List<Double> dapiBackground = getBackgroundIntensity(aDAPIInputImage, aDAPILabelImage);
 
+		VoxelData actinData = new VoxelData();
+		List<Double> actinBackground = null;
+		ImagePlus calculImage = null;
 		if (aActinLabelImage != null)
 		{
 			actinData = determineVoxelLocationAndintensity(aActinInputImage, aActinLabelImage, labels, labelIndices);
+			actinBackground = getBackgroundIntensity(aActinInputImage, aActinLabelImage);
+
+			// Do an erode to reduce the actin segment thickness
+			final ImagePlus surroundingsImage = aActinLabelImage.duplicate();
+			surroundingsImage.show();
+			IJ.run("Max...", "value=1 stack");
+			IJ.run("Multiply...", "value=255 stack");
+			IJ.run("8-bit");
+			IJ.run("Max...", "value=1 stack");
+			IJ.run("Multiply...", "value=255.000 stack");
+			Toolbar.setBackgroundColor(Color.BLACK);
+			IJ.run("Erode", "stack");
+			IJ.run("16-bit");
+			IJ.run("Max...", "value=1 stack");
+			final ImageCalculator calc = new ImageCalculator();
+			calculImage = calc.run("Multiply create stack", surroundingsImage, aActinLabelImage);
+			calculImage.show();
+
+			surroundingsImage.changes = false;
+			surroundingsImage.close();
 		}
 
 		final Cell3D[] cells = new Cell3D[numLabels];
 		final Calibration calibration = aDAPIInputImage.getCalibration();
 		final double volumePerVoxel = calibration.pixelWidth * calibration.pixelHeight * calibration.pixelDepth;
+		final double zFactor = calibration.pixelDepth / calibration.pixelWidth;
 
 		// Fill the array list of nucleus
 		for (int i = 0; i < numLabels; i++)
 		{
+			final int label = labels[i];
+
 			Set<Integer> touchingNeighborsCell = null;
+			List<Coordinates> nucleusSurrounding = null;
 			if (aActinLabelImage != null)
 			{
 				touchingNeighborsCell = computeTouchingNeighbors(actinData.outlines[i], labels[i], aActinLabelImage, aCalculateDams[1]);
+				nucleusSurrounding = computeNucleusSurrounding(dapiData.outlines[i], labels[i], aDAPILabelImage, calculImage, zFactor);
 			}
-			final Nucleus3D nucleus = new Nucleus3D(labels[i], dapiData.voxelCoordinates[i], dapiData.voxelIntensityValues[i], dapiData.outlines[i], volumePerVoxel);
+
+			Labeled_Coordinate cellSeed = null;
+			for (final Labeled_Coordinate seed : aLabeledSeeds)
+			{
+				if (seed.getLabel() == label)
+				{
+					cellSeed = seed;
+					break;
+				}
+			}
+
+			final Nucleus3D nucleus = new Nucleus3D(label, dapiData.voxelCoordinates[i], dapiData.voxelIntensityValues[i], dapiData.outlines[i], volumePerVoxel,
+					dapiBackground.get((int) cellSeed.getZCoordinate()));
 			final Cell3D cell = new Cell3D(nucleus);
 			if (aActinLabelImage != null && nucleus.getNumberOfVoxels() != 0)
 			{
-				cell.addCellFeatures(actinData.voxelCoordinates[i], actinData.voxelIntensityValues[i], actinData.outlines[i], touchingNeighborsCell);
+				cell.addCellFeatures(actinData.voxelCoordinates[i], actinData.voxelIntensityValues[i], actinData.outlines[i], nucleusSurrounding, touchingNeighborsCell,
+						actinBackground.get((int) cellSeed.getZCoordinate()));
 			}
+			nucleus.setSeed(cellSeed.getCoordinates(), cellSeed.getGrayValue());
 			cells[i] = cell;
 		}
 
-		ParticleAnalyzer3D.runParticleAnalyzer3D(cells, aParticleMeasure, aDAPIInputImage, aDAPILabelImage, labels);
-		MCIB3DMeasurements.setMeasurements(cells, aMCIB3DMeasurementSet, aDAPIInputImage, aDAPILabelImage);
+		calculImage.changes = false;
+		calculImage.close();
+
+		ParticleAnalyzer3D.runParticleAnalyzer3D(cells, aDAPIInputImage, aDAPILabelImage, labels);
+		MCIB3DMeasurements.setMeasurements(cells, aDAPIInputImage, aDAPILabelImage);
 
 		return cells;
 	}
@@ -386,20 +609,25 @@ public class CellMeasurer
 	 * @param aMeasurement
 	 *            The type of measurement (e.g. only the nucleus or the entire cell or etc.)
 	 * @param aCells
-	 *            The list of cells to measure on.,
+	 *            The list of cells to measure on.
+	 *
+	 * @return The (median) background measure for each slice of the signal image, based on any non-cell parts of the image and excluding outlier values.
 	 */
-	public static void measureCoordinatesIntensity(final ImagePlus aSignalImage, final String aMeasurement, final Cell3D[] aCells)
+	public static void measureCoordinatesIntensity(final ImagePlus aSignalImage, final ImagePlus aActinSegmentImage, final String aMeasurement, final Cell3D[] aCells)
 	{
 		final double x = aSignalImage.getCalibration().getX(1);
 		final double z = aSignalImage.getCalibration().getZ(1);
+
+		final List<Double> background = getBackgroundIntensity(aSignalImage, aActinSegmentImage);
 
 		if (aMeasurement.equals(Feature_Extractor_3D.NUCLEAR_CENTER))
 		{
 			for (final Cell3D cell : aCells)
 			{
-				final List<Double> intensities = Measurer.getIntensity3D(cell.getNucleus().getSeed(), EXTRA_SIGNAL_RADIUS, z / x, aSignalImage);
+				final Coordinates seed = cell.getNucleus().getSeed();
+				final List<Double> intensities = Measurer.getIntensity3D(seed, EXTRA_SIGNAL_RADIUS, z / x, aSignalImage);
 
-				cell.addSignalMeasurements(new SegmentMeasurements(intensities));
+				cell.addSignalMeasurements(new SegmentMeasurements(intensities, background.get((int) seed.getZcoordinate())));
 			}
 		}
 		else if (aMeasurement.equals(Feature_Extractor_3D.NUCLEAR))
@@ -408,7 +636,8 @@ public class CellMeasurer
 			{
 				final List<Double> intensities = Measurer.getIntensityCell3D(cell.getNucleus().getNucleusCoordinates(), aSignalImage);
 
-				cell.addSignalMeasurements(new SegmentMeasurements(intensities));
+				final Coordinates seed = cell.getNucleus().getSeed();
+				cell.addSignalMeasurements(new SegmentMeasurements(intensities, background.get((int) seed.getZcoordinate())));
 			}
 		}
 		else if (aMeasurement.equals(Feature_Extractor_3D.CELL))
@@ -417,19 +646,39 @@ public class CellMeasurer
 			{
 				final List<Double> intensities = Measurer.getIntensityCell3D(cell.getCoordinates(), aSignalImage);
 
-				cell.addSignalMeasurements(new SegmentMeasurements(intensities));
+				final Coordinates seed = cell.getNucleus().getSeed();
+				cell.addSignalMeasurements(new SegmentMeasurements(intensities, background.get((int) seed.getZcoordinate())));
+			}
+		}
+		else if (aMeasurement.equals(Feature_Extractor_3D.NUCLEUS_SURROUND))
+		{
+			for (final Cell3D cell : aCells)
+			{
+				final List<Double> intensities = Measurer.getIntensityCell3D(cell.getNucleusSurroundings(), aSignalImage);
+
+				final Coordinates seed = cell.getNucleus().getSeed();
+				cell.addSignalMeasurements(new SegmentMeasurements(intensities, background.get((int) seed.getZcoordinate())));
 			}
 		}
 		else
 		{
 			// Otherwise, measure cell without nucleus voxels.
+			IJ.showStatus("Calculating cell without nucleus intensity");
+			final int finalIndex = aCells.length;
+			int currentIndex = 0;
+			IJ.showProgress(currentIndex, finalIndex);
 			for (final Cell3D cell : aCells)
 			{
-				final List<Coordinates> coordinates = cell.getCoordinates();
-				coordinates.removeAll(cell.getNucleus().getNucleusCoordinates());
+				currentIndex++;
+				IJ.showProgress(currentIndex, finalIndex);
+				List<Coordinates> coordinates = (List<Coordinates>) ((ArrayList) cell.getCoordinates()).clone();
+				final HashSet<Coordinates> tmp = new HashSet<>(coordinates);
+				tmp.removeAll(cell.getNucleus().getNucleusCoordinates()); // Linear operation
+				coordinates = new ArrayList<>(tmp);
 				final List<Double> intensities = Measurer.getIntensityCell3D(coordinates, aSignalImage);
 
-				cell.addSignalMeasurements(new SegmentMeasurements(intensities));
+				final Coordinates seed = cell.getNucleus().getSeed();
+				cell.addSignalMeasurements(new SegmentMeasurements(intensities, background.get((int) seed.getZcoordinate())));
 			}
 		}
 	}

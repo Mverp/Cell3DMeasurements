@@ -49,15 +49,18 @@ public class Nucleus3D extends Volume3D
 	 *            The coordinates of the points making up the outside of the nucleus segment
 	 * @param aVolumePerVoxel
 	 *            The volume that each voxel represents in the image
+	 * @param aBackgroundMeasure
+	 *            The background (i.e. non-segment) measure on the nucleus signal
 	 */
-	public Nucleus3D(final int aLabel, final List<Coordinates> aNucleusCoordinates, final List<Double> aIntensityValues, final List<Coordinates> aNucleusOutlines, final double aVolumePerVoxel)
+	public Nucleus3D(final int aLabel, final List<Coordinates> aNucleusCoordinates, final List<Double> aIntensityValues, final List<Coordinates> aNucleusOutlines, final double aVolumePerVoxel,
+			final double aBackgroundMeasure)
 	{
 		super(aNucleusCoordinates);
 		this.label = aLabel;
 		this.nucleusCoordinates = aNucleusCoordinates;
 		this.nucleusOutlines = aNucleusOutlines;
 		this.volumePerVoxel = aVolumePerVoxel;
-		this.measurements = new SegmentMeasurements(aIntensityValues);
+		this.measurements = new SegmentMeasurements(aIntensityValues, aBackgroundMeasure);
 	}
 
 
@@ -296,7 +299,7 @@ public class Nucleus3D extends Volume3D
 	 */
 	public void setSeed(final Coordinates aSeed, final double aAutomaticValue)
 	{
-		getMeasurements().setMexicanHatValue(aAutomaticValue);
+		getMeasurements().setMeasurement(SegmentMeasurements.LOG_VALUE, aAutomaticValue);
 		this.seed = aSeed;
 	}
 

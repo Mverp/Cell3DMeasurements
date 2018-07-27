@@ -1,9 +1,15 @@
 package featureextractor;
 
+import static featureextractor.Feature_Extractor_3D.*;
+import static migrationmodeanalysis.MigrationModeAnalyser.*;
+
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
+import configuration.Measurement_Selector;
 import data.Cell3D;
 import data.Cell3D_Group;
 import data.Coordinates;
@@ -13,7 +19,7 @@ import ij.IJ;
 import ij.measure.ResultsTable;
 
 /**
- * Create a summary ResultsTable based on the data that has been provided.
+ * Helper class to generate data summaries (as ResultsTables) for the feature extractor data.
  *
  * @author Merijn van Erp
  * @author Esther Markus
@@ -21,6 +27,363 @@ import ij.measure.ResultsTable;
  */
 public class ResultsTableGenerator
 {
+	private static void addGroupMeasurements(final Cell3D_Group aCells, final String[] aGroupNames, final ResultsTable aResultsTable)
+	{
+		for (final String measurementName : aGroupNames)
+		{
+			if (Measurement_Selector.getMeasurementPreference(measurementName))
+			{
+				final Double measurement = aCells.getMeanNucleusMeasure(measurementName);
+				if (measurement != null)
+				{
+					aResultsTable.addValue("nucleus " + measurementName, measurement);
+				}
+			}
+		}
+	}
+
+
+	private static void addGroupMeasurements(final SegmentMeasurements aMeasurements, final String[] aMeasurementNames, final ResultsTable aResultsTable)
+	{
+		addGroupMeasurements(aMeasurements, aMeasurementNames, "", aResultsTable);
+	}
+
+
+	private static void addGroupMeasurements(final SegmentMeasurements aMeasurements, final String[] aMeasurementNames, final String aPrefix, final ResultsTable aResultsTable)
+	{
+		for (final String measurementName : aMeasurementNames)
+		{
+			if (Measurement_Selector.getMeasurementPreference(measurementName))
+			{
+				final Double measurementValue = aMeasurements.getMeasurement(measurementName);
+				if (measurementValue != null)
+				{
+					aResultsTable.addValue(aPrefix + measurementName, measurementValue);
+				}
+			}
+		}
+	}
+
+
+	/**
+	 * Fill a ResultsTable with the data for the entire image instead of per cell/nucleus/group.
+	 *
+	 * @param aMigrationSetData
+	 *            The data set in total numbers such as total number of single cells or the volume of all collective cells
+	 * @param aMigrationAccuracyData
+	 *            How well are the different types of migration identified by the feature extractor
+	 * @param aMarkerAccuracyData
+	 *            How well did the segmentation go when compared to a manual nucleus identification
+	 * @param aCells
+	 *            The identified cells as Cell3D
+	 * @param aNumberOfSeeds
+	 *            The number of seeds that was detected
+	 * @param aTitle
+	 *            The title of the image to add to the summary line
+	 */
+	public static ResultsTable getImageSummary(final double[][] aMigrationSetData, final double[] aMigrationAccuracyData, final int[] aMarkerAccuracyData, final Cell3D_Group aCells,
+			final int aNumberOfSeeds, final String aTitle)
+	{
+		final ResultsTable resultsTable = new ResultsTable();
+		resultsTable.incrementCounter(); // Fill the new table
+		resultsTable.addValue("Amount", aCells.getMemberCount()); // Add the amount value of the image
+
+		resultsTable.addValue("% Nucleus segmentation precision", aCells.getSegmentationPrecision());
+		resultsTable.addValue("% Nucleus oversegmented", aCells.getPercentageNucleusOverSegmented());
+		resultsTable.addValue("% Nucleus undersegmented", aCells.getPercentageNucleusUnderSegmented());
+
+		resultsTable.addValue("Nucleus correct segmented", aCells.getNucleusCorrectSegmented());
+		resultsTable.addValue("Nucleus oversegmented", aCells.getNucleusOverSegmented());
+		resultsTable.addValue("Nucleus undersegmented", aCells.getNucleusUnderSegmented());
+
+		resultsTable.addValue("Nucleus selected", aCells.getNucleusSelected());
+		resultsTable.addValue("Nucleus excluded (correct segmented)", aCells.getNucleusExcludedType()[0]);
+		resultsTable.addValue("Nucleus excluded (oversegmented)", aCells.getNucleusExcludedType()[1]);
+		resultsTable.addValue("Nucleus excluded (undersegmented)", aCells.getNucleusExcludedType()[2]);
+		resultsTable.addValue("Nucleus deselected on borderand regression", aCells.getNucleusTwiceExcluded());
+		resultsTable.addValue("Excluded nuclei on size and border", aCells.getNucleusExcludedBorderAndSize());
+		resultsTable.addValue("Border nucleus", aCells.getNucleusExcludedBorder());
+		resultsTable.addValue("Excluded nuclei on size", aCells.getNucleusToSmall());
+		resultsTable.addValue("Excluded nucleus", aCells.getNucleusNOTSelected());
+
+		// If there is migration data, add it here
+		if (aMigrationSetData != null)
+		{
+			final double totalNuclei = aMigrationSetData[TOTAL_COUNT][NUMBER_COUNT];
+			final double percentageSpheroid = (aMigrationSetData[SPHEROID_COUNT][NUMBER_COUNT] / totalNuclei) * 100.0;
+			final double percentageCollective = (aMigrationSetData[COLLECTIVE_COUNT][NUMBER_COUNT] / totalNuclei) * 100.0;
+			final double percentageDualCell = (aMigrationSetData[DUAL_COUNT][NUMBER_COUNT] / totalNuclei) * 100.0;
+			final double percentageSingleCell = (aMigrationSetData[SINGLE_COUNT][NUMBER_COUNT] / totalNuclei) * 100.0;
+			final double percentageVolumeSpheroid = (aMigrationSetData[SPHEROID_COUNT][VOLUME_NUCLEI] / aMigrationSetData[TOTAL_COUNT][VOLUME_NUCLEI]) * 100.0;
+			final double percentageVolumeCollective = (aMigrationSetData[COLLECTIVE_COUNT][VOLUME_NUCLEI] / aMigrationSetData[TOTAL_COUNT][VOLUME_NUCLEI]) * 100.0;
+			final double percentageVolumeDualCell = (aMigrationSetData[DUAL_COUNT][VOLUME_NUCLEI] / aMigrationSetData[TOTAL_COUNT][VOLUME_NUCLEI]) * 100.0;
+			final double percentageVolumeSingleCell = (aMigrationSetData[SINGLE_COUNT][VOLUME_NUCLEI] / aMigrationSetData[TOTAL_COUNT][VOLUME_NUCLEI]) * 100.0;
+			final double percentageVolumeSpheroidCell = (aMigrationSetData[SPHEROID_COUNT][VOLUME_CELL] / aMigrationSetData[TOTAL_COUNT][VOLUME_CELL]) * 100.0;
+			final double percentageVolumeCollectiveCell = (aMigrationSetData[COLLECTIVE_COUNT][VOLUME_CELL] / aMigrationSetData[TOTAL_COUNT][VOLUME_CELL]) * 100.0;
+			final double percentageVolumeDualCellCell = (aMigrationSetData[DUAL_COUNT][VOLUME_CELL] / aMigrationSetData[TOTAL_COUNT][VOLUME_CELL]) * 100.0;
+			final double percentageVolumeSingleCellCell = (aMigrationSetData[SINGLE_COUNT][VOLUME_CELL] / aMigrationSetData[TOTAL_COUNT][VOLUME_CELL]) * 100.0;
+
+			final double amountOfCells = aMigrationAccuracyData[CORTOT] + aMigrationAccuracyData[ERRTOT] + aMigrationAccuracyData[NOTOT];
+			resultsTable.addValue("% Nucleus correct migration mode", (aMigrationAccuracyData[CORTOT] / amountOfCells) * 100.0);
+			resultsTable.addValue("% Nucleus wrong migration mode", (aMigrationAccuracyData[ERRTOT] / amountOfCells) * 100.0);
+			resultsTable.addValue("% Nucleus without migration mode", (aMigrationAccuracyData[NOTOT] / amountOfCells) * 100.0);
+
+			final double amountOfSingleCells = aMigrationAccuracyData[CORSIN] + aMigrationAccuracyData[ERRSIN] + aMigrationAccuracyData[NOSIN];
+			resultsTable.addValue("% SingleCell correct migration mode", (aMigrationAccuracyData[CORSIN] / amountOfSingleCells) * 100.0);
+			resultsTable.addValue("% SingleCell wrong migration mode", (aMigrationAccuracyData[ERRSIN] / amountOfSingleCells) * 100.0);
+			resultsTable.addValue("% SingleCell without migration mode", (aMigrationAccuracyData[NOSIN] / amountOfSingleCells) * 100.0);
+
+			resultsTable.addValue("True positive single cells", aMigrationAccuracyData[CORSIN]);
+			resultsTable.addValue("False positivie single cells", aMigrationAccuracyData[FALSEPOS]);
+			resultsTable.addValue("False negative single cells", aMigrationAccuracyData[ERRSIN] + aMigrationAccuracyData[NOSIN]);
+
+			resultsTable.addValue("Single cell segmentation accuracy", (aMigrationAccuracyData[CORSIN] / (aMigrationAccuracyData[CORSIN] + aMigrationAccuracyData[FALSEPOS])) * 100.0);
+			resultsTable.addValue("Single cell sensitivity", (aMigrationAccuracyData[CORSIN] / amountOfSingleCells) * 100.0);
+
+			final double amountOfCoreCells = aMigrationAccuracyData[CORCOR] + aMigrationAccuracyData[ERRCOR] + aMigrationAccuracyData[NOCOR];
+			if (amountOfCoreCells > 0)
+			{
+				resultsTable.addValue("% Core cells correct as core", (aMigrationAccuracyData[CORCOR] / amountOfCoreCells) * 100.0);
+				resultsTable.addValue("% Core cells with (erroneous) migration mode", (aMigrationAccuracyData[ERRCOR] / amountOfCoreCells) * 100.0);
+				resultsTable.addValue("% Core cells with no migration mode", (aMigrationAccuracyData[NOCOR] / amountOfCoreCells) * 100.0);
+			}
+
+			final double amountOfDualCells = aMigrationAccuracyData[CORDUO] + aMigrationAccuracyData[ERRDUO] + aMigrationAccuracyData[NODUO];
+			if (amountOfDualCells > 0)
+			{
+				resultsTable.addValue("% Dual cell correct migration mode", (aMigrationAccuracyData[CORDUO] / amountOfDualCells) * 100.0);
+				resultsTable.addValue("% Dual cell wrong migration mode", (aMigrationAccuracyData[ERRDUO] / amountOfDualCells) * 100.0);
+				resultsTable.addValue("% Dual cell without migration mode", (aMigrationAccuracyData[NODUO] / amountOfDualCells) * 100.0);
+			}
+
+			final double amountOfMultiCells = aMigrationAccuracyData[CORCOL] + aMigrationAccuracyData[ERRCOL] + aMigrationAccuracyData[NOCOL];
+			if (amountOfMultiCells > 0)
+			{
+				resultsTable.addValue("% Multi cell correct migration mode", (aMigrationAccuracyData[CORCOL] / amountOfMultiCells) * 100.0);
+				resultsTable.addValue("% Multi cell wrong migration mode", (aMigrationAccuracyData[ERRCOL] / amountOfMultiCells) * 100.0);
+				resultsTable.addValue("% Multi cell without migration mode", (aMigrationAccuracyData[NOCOL] / amountOfMultiCells) * 100.0);
+			}
+
+			resultsTable.addValue("% Nuclei in Spheroid", percentageSpheroid);
+			resultsTable.addValue("% Nuclei in Collective mode", percentageCollective);
+			resultsTable.addValue("% Nuclei in Dual mode", percentageDualCell);
+			resultsTable.addValue("% Nuclei in SingleCell mode", percentageSingleCell);
+			resultsTable.addValue("% Volume nucleus in Spheroid", percentageVolumeSpheroid);
+			resultsTable.addValue("% Volume nucleus in Collective mode", percentageVolumeCollective);
+			resultsTable.addValue("% Volume nucleus in Dual mode", percentageVolumeDualCell);
+			resultsTable.addValue("% Volume nucleus in SingleCell mode", percentageVolumeSingleCell);
+			resultsTable.addValue("% Volume cell in Spheroid", percentageVolumeSpheroidCell);
+			resultsTable.addValue("% Volume cell in Collective mode", percentageVolumeCollectiveCell);
+			resultsTable.addValue("% Volume cell in Dual mode", percentageVolumeDualCellCell);
+			resultsTable.addValue("% Volume cell in SingleCell mode", percentageVolumeSingleCellCell);
+
+			resultsTable.addValue("# Nuclei in spheroid", aMigrationSetData[SPHEROID_COUNT][NUMBER_COUNT]);
+			resultsTable.addValue("# Nuclei in collective mode", aMigrationSetData[COLLECTIVE_COUNT][NUMBER_COUNT]);
+			resultsTable.addValue("# Nuclei in dual mode", aMigrationSetData[DUAL_COUNT][NUMBER_COUNT]);
+			resultsTable.addValue("# Nuclei in single cell mode", aMigrationSetData[SINGLE_COUNT][NUMBER_COUNT]);
+			resultsTable.addValue("Total nuclei counted", totalNuclei);
+			resultsTable.addValue("Nuclei volume in spheroid", aMigrationSetData[SPHEROID_COUNT][VOLUME_NUCLEI]);
+			resultsTable.addValue("Nuclei volume in collective mode", aMigrationSetData[COLLECTIVE_COUNT][VOLUME_NUCLEI]);
+			resultsTable.addValue("Nuclei volume in single cell mode", aMigrationSetData[SINGLE_COUNT][VOLUME_NUCLEI]);
+		}
+
+		resultsTable.addValue("Mean volume", aCells.getMeanVolume()); // Add the mean area value of the image
+		resultsTable.addValue("Mean number of Voxels", aCells.getMeanNumberOfVoxels());
+
+		addGroupMeasurements(aCells, SegmentMeasurements.STANDARD_GROUP, resultsTable);
+
+		final List<Double> extraChannelsMeans = aCells.getMeanExtraChannels();
+		if (extraChannelsMeans != null)
+		{
+			final List<Double> backgrounds = aCells.getBackgrounExtraChannels();
+			for (int extraIndex = 0; extraIndex < extraChannelsMeans.size(); extraIndex++)
+			{
+				resultsTable.addValue("Mean additional channel " + (extraIndex + 1), extraChannelsMeans.get(extraIndex));
+				resultsTable.addValue("Background additionall channel " + (extraIndex + 1), backgrounds.get(extraIndex));
+			}
+		}
+
+		addGroupMeasurements(aCells, SegmentMeasurements.MORPHOLIBJ_GROUP, resultsTable);
+		addGroupMeasurements(aCells, SegmentMeasurements.MCIB3D_GROUP, resultsTable);
+
+		resultsTable.addValue("Total seeds", aNumberOfSeeds);
+
+		// Handle the manual marker results
+		if (aMarkerAccuracyData != null)
+		{
+			final double amountMarkersCounted = aMarkerAccuracyData[MARKER_OK] + aMarkerAccuracyData[MARKER_DOUBLE] + aMarkerAccuracyData[MARKER_NONUC];
+			final double totalAmountMarkersCounted = amountMarkersCounted + aMarkerAccuracyData[MARKER_EX] + aMarkerAccuracyData[MARKER_DQ];
+			resultsTable.addValue("Total markers", totalAmountMarkersCounted);
+			resultsTable.addValue("Marker in a nucleus", aMarkerAccuracyData[MARKER_OK]);
+			resultsTable.addValue("Markers double in a nucleus", aMarkerAccuracyData[MARKER_DOUBLE]);
+			resultsTable.addValue("Marker without a nucleus", aMarkerAccuracyData[MARKER_NONUC]);
+			resultsTable.addValue("Markers in an excluded nucleus", aMarkerAccuracyData[MARKER_EX]);
+			resultsTable.addValue("Marker in a disqualified nucleus", aMarkerAccuracyData[MARKER_DQ]);
+
+			resultsTable.addValue("% Markers in a nucleus (sensitivity)", ((aMarkerAccuracyData[MARKER_OK]) / totalAmountMarkersCounted) * 100.0);
+			resultsTable.addValue("% Markers outside a nucleus", ((aMarkerAccuracyData[MARKER_NONUC]) / totalAmountMarkersCounted) * 100.0);
+			resultsTable.addValue("% Markers double in a nucleus", ((aMarkerAccuracyData[MARKER_DOUBLE]) / totalAmountMarkersCounted) * 100.0);
+			resultsTable.addValue("% Markers excluded", ((aMarkerAccuracyData[MARKER_EX] + aMarkerAccuracyData[MARKER_DQ]) / totalAmountMarkersCounted) * 100.0);
+		}
+
+		resultsTable.setLabel(aTitle, resultsTable.getCounter() - 1);
+		return resultsTable;
+	}
+
+
+	public static ResultsTable getKarolinskaResults(final Cell3D[] aCells)
+	{
+		final ResultsTable resultsTable = new ResultsTable();
+		int nrMigratedCells = 0;
+		int nrSingleCells = 0;
+
+		for (final Cell3D cell : aCells)
+		{
+			final Nucleus3D nucleus = cell.getNucleus();
+			final double migrationDistance = nucleus.getDistanceToCore();
+			if (!nucleus.isBorderNucleus() && migrationDistance > 0)
+			{
+				nrMigratedCells++;
+				if (cell.getMigrationMode().equals(Cell3D_Group.SINGLE))
+				{
+					nrSingleCells++;
+				}
+			}
+		}
+
+		for (final Cell3D cell : aCells)
+		{
+			final Nucleus3D nucleus = cell.getNucleus();
+			final double migrationDistance = nucleus.getDistanceToCore();
+			if (!nucleus.isBorderNucleus() && migrationDistance > 0)
+			{
+				resultsTable.incrementCounter();
+				resultsTable.addValue("Label", nucleus.getLabel());
+				resultsTable.addValue("Migration distance", nucleus.getDistanceToCore());
+
+				final SegmentMeasurements nucleusMeasure = cell.getSignalMeasurements().get(0);
+				final SegmentMeasurements cellMeasure = cell.getSignalMeasurements().get(1);
+				final double cellYapValue = Math.max(cellMeasure.getMeasurement(SegmentMeasurements.MEAN_INTENSITY), 1); // Use 1 as a min value and let the image work with that
+				final double nucleusYapValue = Math.max(nucleusMeasure.getMeasurement(SegmentMeasurements.MEAN_INTENSITY), 1); // Use 1 as a min value and let the image work
+				resultsTable.addValue("YAP ratio", nucleusYapValue / cellYapValue);
+
+				resultsTable.addValue("nrMigratedCells", nrMigratedCells);
+				resultsTable.addValue("nrSingleCells", nrSingleCells);
+				resultsTable.addValue("Single cell?", "" + cell.getMigrationMode().equals(Cell3D_Group.SINGLE));
+			}
+		}
+
+		return resultsTable;
+	}
+
+
+	/**
+	 * Get all the measurements that are available on each cell (excluding nucleus specific measurements).
+	 *
+	 * @param aCells
+	 *            The list of cells
+	 * @param aAddMigrationData
+	 *            Should migration mode data be added
+	 *
+	 * @return A ResultsTable with all the cell measurements (one line per cell).
+	 */
+	public static ResultsTable getResultsPerCell(final Cell3D[] aCells, final boolean aAddMigrationData)
+	{
+
+		final ResultsTable resultsTable = new ResultsTable();
+		for (final Cell3D cell : aCells)
+		{
+			final Nucleus3D nucleus = cell.getNucleus();
+			resultsTable.incrementCounter();
+			resultsTable.addValue("Label", nucleus.getLabel());
+
+			final SegmentMeasurements measurements = cell.getMeasurements();
+			addGroupMeasurements(measurements, SegmentMeasurements.STANDARD_GROUP, resultsTable);
+			final List<SegmentMeasurements> signalMeasurements = cell.getSignalMeasurements();
+			if (signalMeasurements != null && !signalMeasurements.isEmpty())
+			{
+				int i = 0;
+				for (final SegmentMeasurements measure : signalMeasurements)
+				{
+					addGroupMeasurements(measure, SegmentMeasurements.STANDARD_GROUP, "Additional channel " + i + " ", resultsTable);
+					// resultsTable.addValue("Additional channel " + i + " mean intensity signal ", measure.getMeasurement(SegmentMeasurements.MEAN_INTENSITY));
+					// resultsTable.addValue("Additional channel " + i + " background signal ", measure.getMeasurement(SegmentMeasurements.BACKGROUND_INTENSITY));
+					i++;
+				}
+			}
+			if (nucleus.getDistanceToCentre() != nucleus.getDistanceToCore())
+			{
+				resultsTable.addValue("Migration distance", nucleus.getDistanceToCore());
+			}
+			resultsTable.addValue("Number of voxels", nucleus.getNumberOfVoxels());
+			resultsTable.addValue("Volume", nucleus.getVolume());
+
+			if (aAddMigrationData)
+			{
+				resultsTable.addValue("Migration mode", cell.getMigrationMode());
+				resultsTable.addValue("Manual migration mode", cell.getMarkerMigrationMode());
+			}
+
+			// Do the rest of the measurements as well, just remove the previous standard ones.
+			final Set<String> restOfNames = measurements.getMeasurementNames();
+			restOfNames.removeAll(Arrays.asList(SegmentMeasurements.STANDARD_GROUP));
+			addGroupMeasurements(measurements, restOfNames.toArray(new String[restOfNames.size()]), resultsTable);
+		}
+
+		return resultsTable;
+
+	}
+
+
+	/**
+	 * Get all the measurements that are available on each nucleus.
+	 *
+	 * @param aCells
+	 *            The list of cells (containing the measured nuclei)
+	 *
+	 * @return A ResultsTable with all the nuclei measurements (one line per nucleus). May return null if a nucleus without a seed has been found (error).
+	 */
+	public static ResultsTable getResultsPerNucleus(final Cell3D[] aCells)
+	{
+		final ResultsTable resultsTable = new ResultsTable();
+		for (final Cell3D cell : aCells)
+		{
+			final Nucleus3D nucleus = cell.getNucleus();
+			resultsTable.incrementCounter();
+			resultsTable.addValue("Label", nucleus.getLabel());
+			final Coordinates seed = nucleus.getSeed();
+			if (seed == null)
+			{
+				// A nucleus without a seed should not happen. Just return without any results!
+				return null;
+			}
+			resultsTable.addValue("XCordinate", seed.getXcoordinate());
+			resultsTable.addValue("YCordinate", seed.getYcoordinate());
+			resultsTable.addValue("ZCordinate", seed.getZcoordinate());
+			resultsTable.addValue("Amount markers", nucleus.getMarkersCount());
+			resultsTable.addValue("Under volume threshold", nucleus.isTooSmall() + "");
+			resultsTable.addValue("Border nucleus", nucleus.isBorderNucleus() + "");
+			resultsTable.addValue("Distance to centre", nucleus.getDistanceToCentre() + "");
+			resultsTable.addValue("Distance to spheroid border", nucleus.getDistanceToCore() + "");
+
+			resultsTable.addValue("Manual migration mode", cell.getMarkerMigrationMode());
+
+			// Separate loop for standard measurements to enforce order
+			final SegmentMeasurements measurements = nucleus.getMeasurements();
+			addGroupMeasurements(measurements, SegmentMeasurements.STANDARD_GROUP_NUCLEUS, resultsTable);
+			resultsTable.addValue("NumberOfVoxels", nucleus.getNumberOfVoxels());
+			resultsTable.addValue("Volume", nucleus.getVolume());
+
+			// Do the rest of the measurements as well, just remove the previous standard ones.
+			final List<String> restOfNames = new ArrayList<>();
+			restOfNames.addAll(measurements.getMeasurementNames());
+			restOfNames.removeAll(Arrays.asList(SegmentMeasurements.STANDARD_GROUP_NUCLEUS));
+			addGroupMeasurements(measurements, restOfNames.toArray(new String[restOfNames.size()]), resultsTable);
+		}
+
+		return resultsTable;
+	}
+
 
 	/**
 	 * Save a results table as a Excel readable file.
@@ -51,383 +414,11 @@ public class ResultsTableGenerator
 	}
 
 
-	public static ResultsTable summaryCellNucleusTable(final Cell3D[] aCells)
+	/**
+	 * Made private to prevent instantiation.
+	 */
+	private ResultsTableGenerator()
 	{
-
-		final ResultsTable resultsTable = new ResultsTable();
-		for (final Cell3D cell : aCells)
-		{
-			final Nucleus3D nucleus = cell.getNucleus();
-			resultsTable.incrementCounter();
-			resultsTable.addValue("Label", nucleus.getLabel());
-			final Coordinates seed = nucleus.getSeed();
-			if (seed == null)
-			{
-				return null;
-			}
-			resultsTable.addValue("XCordinate", seed.getXcoordinate());
-			resultsTable.addValue("YCordinate", seed.getYcoordinate());
-			resultsTable.addValue("ZCordinate", seed.getZcoordinate());
-			resultsTable.addValue("Amount markers", nucleus.getMarkersCount());
-			resultsTable.addValue("Under volume threshold", nucleus.isTooSmall() + "");
-			// resultsTable.addValue("Disqualified", nucleus.isDisqualified() + "");
-			resultsTable.addValue("BorderNucleus", nucleus.isBorderNucleus() + "");
-			resultsTable.addValue("Distance to centre", nucleus.getDistanceToCentre() + "");
-			resultsTable.addValue("Distance to spheroid border", nucleus.getDistanceToCore() + "");
-
-			resultsTable.addValue("Manual migration mode", cell.getMarkerMigrationMode());
-
-			final SegmentMeasurements measurements = nucleus.getMeasurements();
-			resultsTable.addValue("MeanGray", measurements.getMeanIntensity());
-			resultsTable.addValue("StdDev", measurements.getStandardDeviation());
-			resultsTable.addValue("Max", measurements.getMaxIntensity());
-			resultsTable.addValue("Min", measurements.getMinIntensity());
-			resultsTable.addValue("Median", measurements.getMedianIntensity());
-			resultsTable.addValue("Mode", measurements.getModeIntensity());
-			resultsTable.addValue("Skewness", measurements.getSkewness());
-			resultsTable.addValue("Kurtiosis", measurements.getKurtosis());
-			resultsTable.addValue("LoGValue", measurements.getMexicanHatValue());
-			resultsTable.addValue("NumberOfVoxels", nucleus.getNumberOfVoxels());
-			resultsTable.addValue("Volume", nucleus.getVolume());
-			resultsTable.addValue("SurfaceArea", measurements.getSurfaceArea());
-			resultsTable.addValue("Sphericities", measurements.getSphericities());
-			resultsTable.addValue("EulerNumber", measurements.getEulerNumber());
-
-			resultsTable.addValue("Ellipsiod centerX", measurements.getEllipsoid()[0]);
-			resultsTable.addValue("Ellipsiod centerY", measurements.getEllipsoid()[1]);
-			resultsTable.addValue("Ellipsiod centerZ", measurements.getEllipsoid()[2]);
-			resultsTable.addValue("Ellipsiod radius 1", measurements.getEllipsoid()[3]);
-			resultsTable.addValue("Ellipsiod radius 2", measurements.getEllipsoid()[4]);
-			resultsTable.addValue("Ellipsiod radius 3", measurements.getEllipsoid()[5]);
-			resultsTable.addValue("Ellipsiod radius Azim", measurements.getEllipsoid()[6]);
-			resultsTable.addValue("Ellipsiod radius Elev", measurements.getEllipsoid()[7]);
-			resultsTable.addValue("Ellipsiod radius Roll", measurements.getEllipsoid()[8]);
-			resultsTable.addValue("Ellongation R1/R2", measurements.getElongations()[0]);
-			resultsTable.addValue("Ellongation R1/R3", measurements.getElongations()[1]);
-			resultsTable.addValue("Ellongation R2/R3", measurements.getElongations()[2]);
-			resultsTable.addValue("Inscribed Sphere centerX", measurements.getInscribedSphere()[0]);
-			resultsTable.addValue("Inscribed Sphere centerY", measurements.getInscribedSphere()[1]);
-			resultsTable.addValue("Inscribed Sphere centerZ", measurements.getInscribedSphere()[2]);
-			resultsTable.addValue("Inscribed Sphere radius", measurements.getInscribedSphere()[3]);
-
-			resultsTable.addValue("Mean Gray", measurements.getMeanIntensity3D());
-			resultsTable.addValue("StandardDeviation3D", measurements.getStandardDeviation3D());
-			resultsTable.addValue("MinimumGrayValue", measurements.getMinimum3D());
-			resultsTable.addValue("MaximumGrayValue", measurements.getMaximum3D());
-			resultsTable.addValue("IntegratedDensity3D", measurements.getIntegratedDensity3D());
-			resultsTable.addValue("Volume Pixels", measurements.getVolumePixels());
-			resultsTable.addValue("Volume Unit", measurements.getVolumeUnit());
-			resultsTable.addValue("Area Pixels", measurements.getAreaPixels());
-			resultsTable.addValue("Area Unit", measurements.getAreaUnit());
-			resultsTable.addValue("Compactness", measurements.getCompactness());
-			resultsTable.addValue("Sphericity", measurements.getSphericity());
-			resultsTable.addValue("Elongatio", measurements.getElongatio());
-			resultsTable.addValue("Flatness", measurements.getFlatness());
-			resultsTable.addValue("Spareness", measurements.getSpareness());
-		}
-
-		return resultsTable;
-	}
-
-
-	public static ResultsTable summaryCellTable(final Cell3D[] aCells)
-	{
-
-		final ResultsTable resultsTable = new ResultsTable();
-		for (final Cell3D cell : aCells)
-		{
-			final Nucleus3D nucleus = cell.getNucleus();
-			resultsTable.incrementCounter();
-			resultsTable.addValue("Label", nucleus.getLabel());
-
-			final SegmentMeasurements measurements = cell.getMeasurements();
-			resultsTable.addValue("MeanGray", measurements.getMeanIntensity());
-			resultsTable.addValue("StdDev", measurements.getStandardDeviation());
-			resultsTable.addValue("Max", measurements.getMaxIntensity());
-			resultsTable.addValue("Min", measurements.getMinIntensity());
-			resultsTable.addValue("Median", measurements.getMedianIntensity());
-			resultsTable.addValue("Mode", measurements.getModeIntensity());
-			resultsTable.addValue("Skewness", measurements.getSkewness());
-			resultsTable.addValue("Kurtiosis", measurements.getKurtosis());
-			final List<SegmentMeasurements> signalMeasurements = cell.getSignalMeasurements();
-			if (signalMeasurements != null && !signalMeasurements.isEmpty())
-			{
-				int i = 0;
-				for (final SegmentMeasurements measure : signalMeasurements)
-				{
-					resultsTable.addValue("Additional Channel " + i + " Mean Intensity Signal ", measure.getMeanIntensity());
-					i++;
-				}
-			}
-			if (nucleus.getDistanceToCentre() != nucleus.getDistanceToCore())
-			{
-				resultsTable.addValue("Migration distance", nucleus.getDistanceToCore());
-			}
-			resultsTable.addValue("NumberOfVoxels", nucleus.getNumberOfVoxels());
-			resultsTable.addValue("Volume", nucleus.getVolume());
-			resultsTable.addValue("SurfaceArea", measurements.getSurfaceArea());
-			resultsTable.addValue("Sphericities", measurements.getSphericities());
-			resultsTable.addValue("EulerNumber", measurements.getEulerNumber());
-
-			resultsTable.addValue("Ellipsiod centerX", measurements.getEllipsoid()[0]);
-			resultsTable.addValue("Ellipsiod centerY", measurements.getEllipsoid()[1]);
-			resultsTable.addValue("Ellipsiod centerZ", measurements.getEllipsoid()[2]);
-			resultsTable.addValue("Ellipsiod radius 1", measurements.getEllipsoid()[3]);
-			resultsTable.addValue("Ellipsiod radius 2", measurements.getEllipsoid()[4]);
-			resultsTable.addValue("Ellipsiod radius 3", measurements.getEllipsoid()[5]);
-			resultsTable.addValue("Ellipsiod radius Azim", measurements.getEllipsoid()[6]);
-			resultsTable.addValue("Ellipsiod radius Elev", measurements.getEllipsoid()[7]);
-			resultsTable.addValue("Ellipsiod radius Roll", measurements.getEllipsoid()[8]);
-			resultsTable.addValue("Ellongation R1/R2", measurements.getElongations()[0]);
-			resultsTable.addValue("Ellongation R1/R3", measurements.getElongations()[1]);
-			resultsTable.addValue("Ellongation R2/R3", measurements.getElongations()[2]);
-			resultsTable.addValue("Inscribed Sphere centerX", measurements.getInscribedSphere()[0]);
-			resultsTable.addValue("Inscribed Sphere centerY", measurements.getInscribedSphere()[1]);
-			resultsTable.addValue("Inscribed Sphere centerZ", measurements.getInscribedSphere()[2]);
-			resultsTable.addValue("Inscribed Sphere radius", measurements.getInscribedSphere()[3]);
-
-			resultsTable.addValue("Mean Intensity Value 3D", measurements.getMeanIntensity3D());
-			resultsTable.addValue("Standard Deviation 3D", measurements.getStandardDeviation3D());
-			resultsTable.addValue("Minimum Intensity Value 3D", measurements.getMinimum3D());
-			resultsTable.addValue("Maximum Intensity Value 3D", measurements.getMaximum3D());
-			resultsTable.addValue("Integrated Density 3D", measurements.getIntegratedDensity3D());
-			resultsTable.addValue("Volume Pixels", measurements.getVolumePixels());
-			resultsTable.addValue("Volume Unit", measurements.getVolumeUnit());
-			resultsTable.addValue("Area Pixels", measurements.getAreaPixels());
-			resultsTable.addValue("Area Unit", measurements.getAreaUnit());
-			resultsTable.addValue("Compactness", measurements.getCompactness());
-			resultsTable.addValue("Sphericity", measurements.getSphericity());
-			resultsTable.addValue("Elongatio", measurements.getElongatio());
-			resultsTable.addValue("Flatness", measurements.getFlatness());
-			resultsTable.addValue("Spareness", measurements.getSpareness());
-		}
-
-		return resultsTable;
-	}
-
-
-	public static void summaryOfTheImages(final ResultsTable aResultsTable, final double[][] aAmountOfNuclei, final double[] aAmountOfNucleiMigration, final Cell3D_Group aCell3DGroup,
-			final int aNumberOfSeeds, final int aNumberOfMarkers, final int[] aMarkerCounts, final String aTitle, final boolean aMigrationModeInfo)
-	{
-		aResultsTable.incrementCounter(); // Fill the new table
-		aResultsTable.addValue("Amount", aCell3DGroup.getMemberCount()); // Add the amount value of the image
-
-		// TODO: check this
-		aResultsTable.addValue("% Nucleus correct segmented", aCell3DGroup.getPercentageNucleusCorrectSegmented());
-		aResultsTable.addValue("% Nucleus oversegmented", aCell3DGroup.getPercentageNucleusOverSegmented());
-		aResultsTable.addValue("% Nucleus undersegmented", aCell3DGroup.getPercentageNucleusUnderSegmented());
-
-		aResultsTable.addValue("Nucleus correct segmented", aCell3DGroup.getNucleusCorrectSegmented());
-		aResultsTable.addValue("Nucleus oversegmented", aCell3DGroup.getNucleusOverSegmented());
-		aResultsTable.addValue("Nucleus undersegmented", aCell3DGroup.getNucleusUnderSegmented());
-
-		aResultsTable.addValue("Nucleus selected", aCell3DGroup.getNucleusSelected());
-		aResultsTable.addValue("Nucleus excluded (correct segmented)", aCell3DGroup.getNucleusExcludedType()[0]);
-		aResultsTable.addValue("Nucleus excluded (oversegmented)", aCell3DGroup.getNucleusExcludedType()[1]);
-		aResultsTable.addValue("Nucleus excluded (undersegmented)", aCell3DGroup.getNucleusExcludedType()[2]);
-		aResultsTable.addValue("Nucleus deselected on borderand regression", aCell3DGroup.getNucleusTwiceExcluded());
-		aResultsTable.addValue("Excluded nuclei on size and border", aCell3DGroup.getNucleusExcludedBorderAndSize());
-		aResultsTable.addValue("Border nucleus", aCell3DGroup.getNucleusExcludedBorder());
-		aResultsTable.addValue("Excluded nuclei on size", aCell3DGroup.getNucleusToSmall());
-		aResultsTable.addValue("Excluded nucleus", aCell3DGroup.getNucleusNOTSelected());
-
-		if (aMigrationModeInfo)
-		{
-			// TODO: check this
-			final double totalNuclei = aAmountOfNuclei[0][0];
-			final double percentageSpheroid = (aAmountOfNuclei[1][0] / totalNuclei) * 100.0;
-			final double percentageCollective = (aAmountOfNuclei[2][0] / totalNuclei) * 100.0;
-			final double percentageDualCell = (aAmountOfNuclei[3][0] / totalNuclei) * 100.0;
-			final double percentageSingleCell = (aAmountOfNuclei[4][0] / totalNuclei) * 100.0;
-			final double percentageVolumeSpheroid = (aAmountOfNuclei[1][1] / aAmountOfNuclei[0][1]) * 100.0;
-			final double percentageVolumeCollective = (aAmountOfNuclei[2][1] / aAmountOfNuclei[0][1]) * 100.0;
-			final double percentageVolumeDualCell = (aAmountOfNuclei[3][1] / aAmountOfNuclei[0][1]) * 100.0;
-			final double percentageVolumeSingleCell = (aAmountOfNuclei[4][1] / aAmountOfNuclei[0][1]) * 100.0;
-			final double percentageVolumeSpheroidCell = (aAmountOfNuclei[1][2] / aAmountOfNuclei[0][2]) * 100.0;
-			final double percentageVolumeCollectiveCell = (aAmountOfNuclei[2][2] / aAmountOfNuclei[0][2]) * 100.0;
-			final double percentageVolumeDualCellCell = (aAmountOfNuclei[3][2] / aAmountOfNuclei[0][2]) * 100.0;
-			final double percentageVolumeSingleCellCell = (aAmountOfNuclei[4][2] / aAmountOfNuclei[0][2]) * 100.0;
-
-			final double amountOfCells = aAmountOfNucleiMigration[0] + aAmountOfNucleiMigration[1] + aAmountOfNucleiMigration[2];
-			aResultsTable.addValue("% Nucleus correct migrationMode", (aAmountOfNucleiMigration[0] / amountOfCells) * 100.0);
-			aResultsTable.addValue("% Nucleus wrong migration mode", (aAmountOfNucleiMigration[1] / amountOfCells) * 100.0);
-			aResultsTable.addValue("% Nucleus without migrationMode", (aAmountOfNucleiMigration[2] / amountOfCells) * 100.0);
-
-			final double amountOfSingleCells = aAmountOfNucleiMigration[3] + aAmountOfNucleiMigration[4] + aAmountOfNucleiMigration[5];
-			aResultsTable.addValue("% SingleCell correct migrationMode", (aAmountOfNucleiMigration[3] / amountOfSingleCells) * 100.0);
-			aResultsTable.addValue("% SingleCell wrong migration mode", (aAmountOfNucleiMigration[4] / amountOfSingleCells) * 100.0);
-			aResultsTable.addValue("% SingleCell without migrationMode", (aAmountOfNucleiMigration[5] / amountOfSingleCells) * 100.0);
-
-			aResultsTable.addValue("True positive single cells", aAmountOfNucleiMigration[3]);
-			aResultsTable.addValue("False positivie single cells", aAmountOfNucleiMigration[14]);
-			aResultsTable.addValue("False negative single cells", aAmountOfNucleiMigration[4] + aAmountOfNucleiMigration[5]);
-
-			aResultsTable.addValue("Single cell segmentation accuracy", (aAmountOfNucleiMigration[3] / (aAmountOfNucleiMigration[3] + aAmountOfNucleiMigration[14])) * 100.0);
-			aResultsTable.addValue("Single cell sensitivity", (aAmountOfNucleiMigration[3] / (aAmountOfNucleiMigration[3] + aAmountOfNucleiMigration[4] + aAmountOfNucleiMigration[5])) * 100.0);
-
-			final double amountOfCoreCells = aAmountOfNucleiMigration[6] + aAmountOfNucleiMigration[7];
-			if (amountOfCoreCells > 0)
-			{
-				aResultsTable.addValue("% Core cells without migration mode", (aAmountOfNucleiMigration[6] / amountOfCoreCells) * 100.0);
-				aResultsTable.addValue("% Core cells with migration mode", (aAmountOfNucleiMigration[7] / amountOfCoreCells) * 100.0);
-			}
-
-			final double amountOfDualCells = aAmountOfNucleiMigration[8] + aAmountOfNucleiMigration[9] + aAmountOfNucleiMigration[10];
-			if (amountOfDualCells > 0)
-			{
-				aResultsTable.addValue("% Dual cell correct migrationMode", (aAmountOfNucleiMigration[8] / amountOfDualCells) * 100.0);
-				aResultsTable.addValue("% Dual cell wrong migration mode", (aAmountOfNucleiMigration[9] / amountOfDualCells) * 100.0);
-				aResultsTable.addValue("% Dual cell without migrationMode", (aAmountOfNucleiMigration[10] / amountOfDualCells) * 100.0);
-			}
-
-			final double amountOfMultiCells = aAmountOfNucleiMigration[11] + aAmountOfNucleiMigration[12] + aAmountOfNucleiMigration[13];
-			if (amountOfMultiCells > 0)
-			{
-				aResultsTable.addValue("% Multi cell correct migration mode", (aAmountOfNucleiMigration[11] / amountOfMultiCells) * 100.0);
-				aResultsTable.addValue("% Multi cell wrong migration mode", (aAmountOfNucleiMigration[12] / amountOfMultiCells) * 100.0);
-				aResultsTable.addValue("% Multi cell without migration mode", (aAmountOfNucleiMigration[13] / amountOfMultiCells) * 100.0);
-			}
-
-			aResultsTable.addValue("% Nuclei in Spheroid", percentageSpheroid);
-			aResultsTable.addValue("% Nuclei in Collective mode", percentageCollective);
-			aResultsTable.addValue("% Nuclei in Dual mode", percentageDualCell);
-			aResultsTable.addValue("% Nuclei in SingleCell mode", percentageSingleCell);
-			aResultsTable.addValue("% Volume nucleus in Spheroid", percentageVolumeSpheroid);
-			aResultsTable.addValue("% Volume nucleus in Collective mode", percentageVolumeCollective);
-			aResultsTable.addValue("% Volume nucleus in Dual mode", percentageVolumeDualCell);
-			aResultsTable.addValue("% Volume nucleus in SingleCell mode", percentageVolumeSingleCell);
-			aResultsTable.addValue("% Volume cell in Spheroid", percentageVolumeSpheroidCell);
-			aResultsTable.addValue("% Volume cell in Collective mode", percentageVolumeCollectiveCell);
-			aResultsTable.addValue("% Volume cell in Dual mode", percentageVolumeDualCellCell);
-			aResultsTable.addValue("% Volume cell in SingleCell mode", percentageVolumeSingleCellCell);
-
-			aResultsTable.addValue("# Nuclei in Spheroid", aAmountOfNuclei[1][0]);
-			aResultsTable.addValue("# Nuclei in Collective mode", aAmountOfNuclei[2][0]);
-			aResultsTable.addValue("# Nuclei in Dual mode", aAmountOfNuclei[3][0]);
-			aResultsTable.addValue("# Nuclei in SingleCell mode", aAmountOfNuclei[4][0]);
-			aResultsTable.addValue("Total Nuclei counted", totalNuclei);
-			aResultsTable.addValue("# Volume in Spheroid", aAmountOfNuclei[1][1]);
-			aResultsTable.addValue("# Volume in Collective mode", aAmountOfNuclei[2][1]);
-			aResultsTable.addValue("# Volume in SingleCell mode", aAmountOfNuclei[3][1]);
-		}
-
-		aResultsTable.addValue("Mean volume", aCell3DGroup.getMeanVolume()); // Add the mean area value of the image
-		aResultsTable.addValue("Mean number of Voxels", aCell3DGroup.getMeanNumberOfVoxels());
-		aResultsTable.addValue("Mean Gray Value", aCell3DGroup.getMeanGrayValue());
-		aResultsTable.addValue("Mean STDV", aCell3DGroup.getMeanSTDV());
-		aResultsTable.addValue("Mean Skewness", aCell3DGroup.getMeanSkewness());
-		aResultsTable.addValue("Mean Kurtosis", aCell3DGroup.getMeanKurtosis());
-
-		aResultsTable.addValue("SurfaceArea", aCell3DGroup.getMeanSurfaceArea());
-		aResultsTable.addValue("Mean Sphericities", aCell3DGroup.getMeanSphericities());
-		aResultsTable.addValue("Mean Elongation 1", aCell3DGroup.getMeanElongation()[0]);
-		aResultsTable.addValue("Mean Elongation 2", aCell3DGroup.getMeanElongation()[1]);
-		aResultsTable.addValue("Mean Elongation 3", aCell3DGroup.getMeanElongation()[2]);
-
-		aResultsTable.addValue("Mean Volume Pixels", aCell3DGroup.getMeanVolumePixels());
-		aResultsTable.addValue("Mean Volume Unit", aCell3DGroup.getMeanVolumeUnits());
-		aResultsTable.addValue("Mean Area Pixels", aCell3DGroup.getMeanAreaPixels());
-		aResultsTable.addValue("Mean Area Unit", aCell3DGroup.getMeanAreaUnits());
-
-		aResultsTable.addValue("Mean Compactness", aCell3DGroup.getMeanCompactness());
-		aResultsTable.addValue("Mean Sphericity", aCell3DGroup.getMeanSphericity());
-		aResultsTable.addValue("Mean Elongatio", aCell3DGroup.getMeanElongatio());
-		aResultsTable.addValue("Mean Flatness", aCell3DGroup.getMeanFlatness());
-		aResultsTable.addValue("Mean Sparness", aCell3DGroup.getMeanSpareness());
-
-		aResultsTable.addValue("Total seeds", aNumberOfSeeds);
-
-		// Handle the manual marker results
-		if (aNumberOfMarkers > 0)
-		{
-			aResultsTable.addValue("Total markers", aNumberOfMarkers);
-			aResultsTable.addValue("Marker in nucleus", aMarkerCounts[0]);
-			aResultsTable.addValue("Markers double in nucleus", aMarkerCounts[1]);
-			aResultsTable.addValue("Marker without nucleus", aMarkerCounts[2]);
-			aResultsTable.addValue("Markers in excluded nucleus", aMarkerCounts[3]);
-			aResultsTable.addValue("Marker in disqualified nucleus", aMarkerCounts[4]);
-
-			final double amountMarkers = aMarkerCounts[0] + aMarkerCounts[1] + aMarkerCounts[2];
-			final double percentageMarkersFound = ((aMarkerCounts[0]) / amountMarkers) * 100.0;
-			final double percentageMarkersDouble = ((aMarkerCounts[1]) / amountMarkers) * 100.0;
-			final double percentageMarkersNotFound = ((aMarkerCounts[2]) / amountMarkers) * 100.0;
-
-			aResultsTable.addValue("% Markers in nucleus", percentageMarkersFound);
-			aResultsTable.addValue("% Markers outside nucleus", percentageMarkersNotFound);
-			aResultsTable.addValue("% Markers double in nucleus", percentageMarkersDouble);
-		}
-
-		aResultsTable.setLabel(aTitle, aResultsTable.getCounter() - 1);
-	}
-
-
-	public ResultsTable summaryNucleusGroup(final ArrayList<Cell3D_Group> nucleusGroup)
-	{
-
-		final ResultsTable resultsTable = new ResultsTable();
-
-		for (int i = 0; i < nucleusGroup.size(); i++)
-		{
-			resultsTable.incrementCounter();
-
-			resultsTable.addValue("Mode", nucleusGroup.get(i).getMigrationmode());
-			resultsTable.addValue("Manual migration moode", nucleusGroup.get(i).getManualMigrationModeGroup());
-			resultsTable.addValue("XCordinate center", nucleusGroup.get(i).getCenterXYZ()[0]);
-			resultsTable.addValue("YCordinate center", nucleusGroup.get(i).getCenterXYZ()[1]);
-			resultsTable.addValue("ZCordinate center", nucleusGroup.get(i).getCenterXYZ()[2]);
-			resultsTable.addValue("Amount of cells", nucleusGroup.get(i).getMemberCount());
-			resultsTable.addValue("Total Volume", nucleusGroup.get(i).getTotalVolume());
-
-			resultsTable.addValue("MeanGray", nucleusGroup.get(i).getMeanGrayValue());
-			// resultstable.addValue("Mean gray value focal plane", nucleus[k].getGrayValueSecondCannelOnFocalPlane());
-			resultsTable.addValue("StdDev", nucleusGroup.get(i).getMeanSTDV());
-			// resultsTable.addValue("Max", );
-			// resultsTable.addValue("Min", );
-			//// resultsTable.addValue("Median", );
-			// resultsTable.addValue("Mode", );
-			resultsTable.addValue("Skewness", nucleusGroup.get(i).getMeanSkewness());
-			resultsTable.addValue("Kurtiosis", nucleusGroup.get(i).getMeanKurtosis());
-			resultsTable.addValue("Volume", nucleusGroup.get(i).getMeanVolume());
-			resultsTable.addValue("NumberOfVoxels", nucleusGroup.get(i).getMeanNumberOfVoxels());
-
-			resultsTable.addValue("SurfaceArea", nucleusGroup.get(i).getMeanSurfaceArea());
-			resultsTable.addValue("Sphericites", nucleusGroup.get(i).getMeanSphericities());
-			// resultsTable.addValue("EulerNumber", );
-
-			// resultsTable.addValue("Ellipsiod centerX",nucleus[k].getEllipsoid()[0]);
-			// resultsTable.addValue("Ellipsiod centerY",nucleus[k].getEllipsoid()[1]);
-			// resultsTable.addValue("Ellipsiod centerZ",nucleus[k].getEllipsoid()[2]);
-			// resultsTable.addValue("Ellipsiod radius 1",);
-			// resultsTable.addValue("Ellipsiod radius 2",);
-			// resultsTable.addValue("Ellipsiod radius 3",);
-			// resultsTable.addValue("Ellipsiod radius Azim",);
-			// resultsTable.addValue("Ellipsiod radius Elev",);
-			// resultsTable.addValue("Ellipsiod radius Roll",);
-			resultsTable.addValue("Ellongation R1/R2", nucleusGroup.get(i).getMeanElongation()[0]);
-			resultsTable.addValue("Ellongation R1/R3", nucleusGroup.get(i).getMeanElongation()[1]);
-			resultsTable.addValue("Ellongation R2/R3", nucleusGroup.get(i).getMeanElongation()[2]);
-			// resultsTable.addValue("Inscribed Sphere centerX",);
-			// resultsTable.addValue("Inscribed Sphere centerY",);
-			// resultsTable.addValue("Inscribed Sphere centerZ",);
-			// resultsTable.addValue("Inscribed Sphere radius",);
-
-			resultsTable.addValue("Mean Gray", nucleusGroup.get(i).getMeanGray3D());
-			resultsTable.addValue("STDV", nucleusGroup.get(i).getMeanSTDV3D());
-			// resultsTable.addValue("MinimumGrayValue", );
-			// resultsTable.addValue("MaximumGrayValue", );
-			// resultsTable.addValue("IntegratedDensity3D", );
-			resultsTable.addValue("Volume Pixels", nucleusGroup.get(i).getMeanVolumePixels());
-			resultsTable.addValue("Volume Units", nucleusGroup.get(i).getMeanVolumeUnits());
-			resultsTable.addValue("Area Pixels", nucleusGroup.get(i).getMeanAreaPixels());
-			resultsTable.addValue("Area Units", nucleusGroup.get(i).getMeanAreaUnits());
-			resultsTable.addValue("Compactness", nucleusGroup.get(i).getMeanCompactness());
-			resultsTable.addValue("Sphericity", nucleusGroup.get(i).getMeanSphericity());
-			resultsTable.addValue("Elongatio", nucleusGroup.get(i).getMeanElongatio());
-			resultsTable.addValue("Flatness", nucleusGroup.get(i).getMeanFlatness());
-			resultsTable.addValue("Spareness", nucleusGroup.get(i).getMeanSpareness());
-		}
-
-		return resultsTable;
 	}
 
 }

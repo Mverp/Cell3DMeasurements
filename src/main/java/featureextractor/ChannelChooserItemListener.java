@@ -29,7 +29,6 @@ public class ChannelChooserItemListener implements ItemListener
 	@Override
 	public void itemStateChanged(final ItemEvent e)
 	{
-		e.getItemSelectable();
 		if (!this.parent.getSelectedItem().equals("0") && !this.extraOptionAdded)
 		{
 			this.dialog.addChoice("Additional channel " + this.index, this.channelOptions, this.channelOptions[0]);

@@ -66,9 +66,14 @@
 		<dependency>
 			<groupId>github.com.ijpb</groupId>
 			<artifactId>MorphoLibJ</artifactId>
-			<version>1.3.1</version>
+			<version>1.3.3</version>
 			<scope>system</scope>
-			<systemPath>C:\Users\Z228217\Desktop\Fiji.app\plugins\MorphoLibJ_-1.3.2.jar</systemPath>
+			<systemPath>C:\Users\Z228217\Desktop\Fiji.app\plugins\MorphoLibJ_-1.3.6.jar</systemPath>
+		</dependency>
+		<dependency>
+    		<groupId>org.jfree</groupId>
+    		<artifactId>jfreechart</artifactId>
+    		<version>1.5.0</version>
 		</dependency>
 	</dependencies>
 	

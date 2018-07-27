@@ -24,13 +24,14 @@ public class Cell3D
 	// Coordinate lists giving a precise description of the volume of the cell
 	private List<Coordinates> coordinates = new ArrayList<>();
 	private List<Coordinates> outline = new ArrayList<>();
+	private List<Coordinates> nucleusSurroundings = new ArrayList<>();
 
 	// The list of cells that are in contact with this cell
 	private Set<Integer> connectedNeighbours;
 
 	// Measurements on this cell on both actin and any other type of signal
 	private SegmentMeasurements actinMeasurements;
-	private List<SegmentMeasurements> signalMeasurements;
+	private List<SegmentMeasurements> signalMeasurements = null;
 
 
 	/**
@@ -54,15 +55,19 @@ public class Cell3D
 	 *            The gray values for this cell. No specific ordering guaranteed, just a list of all present intensity values.
 	 * @param aOutlines
 	 *            The list of coordinates for just the surface of the cell
-	 * @param aConnetcedNeighbourCells
+	 * @param aConnectedNeighbourCells
 	 *            A list of neighbouring cells that are directly adjacent to (i.e. touching) this cell. Each neighbour is identified by its label number.
+	 * @param aBackgroundIntensity
+	 *            The background intensity measure for the cell (non-nucleus) signal
 	 */
-	public void addCellFeatures(final List<Coordinates> aCoordinates, final List<Double> aGrayValueVoxels, final List<Coordinates> aOutlines, final Set<Integer> aConnetcedNeighbourCells)
+	public void addCellFeatures(final List<Coordinates> aCoordinates, final List<Double> aGrayValueVoxels, final List<Coordinates> aOutlines, final List<Coordinates> aNucleusSurroundings,
+			final Set<Integer> aConnectedNeighbourCells, final Double aBackgroundIntensity)
 	{
 		this.coordinates = aCoordinates;
-		this.actinMeasurements = new SegmentMeasurements(aGrayValueVoxels);
+		this.actinMeasurements = new SegmentMeasurements(aGrayValueVoxels, aBackgroundIntensity);
 		this.outline = aOutlines;
-		this.connectedNeighbours = aConnetcedNeighbourCells;
+		this.connectedNeighbours = aConnectedNeighbourCells;
+		this.nucleusSurroundings = aNucleusSurroundings;
 	}
 
 
@@ -188,6 +193,18 @@ public class Cell3D
 
 
 	/**
+	 * Get the coordinates of all the pixels that lay within the direct surroundings outside of the nucleus. Does not contain this or other nucleus' pixels and only contains pixles that are in an actin segment. NOTE: may contain pixels that are from
+	 * another actin segment!
+	 *
+	 * @return The list of pixel Coordinates that make up the cell surroundings outside the nucleus. May be an empty List if no actin segmentation has been done or if the nucleus has no adjacent actin pixels.
+	 */
+	public List<Coordinates> getNucleusSurroundings()
+	{
+		return this.nucleusSurroundings;
+	}
+
+
+	/**
 	 * Get the coordinates of all the pixels that lay on the outer edges of the cell segment.
 	 *
 	 * @return The list of pixel Coordinates that make up the outline of the cell
@@ -211,7 +228,7 @@ public class Cell3D
 
 	/**
 	 * Get the volume of this cell (in units defined by the image).
-	 * 
+	 *
 	 * @return The total volume of this cell (including nucleus).
 	 */
 	public double getVolume()

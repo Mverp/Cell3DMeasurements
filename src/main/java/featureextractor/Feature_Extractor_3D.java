@@ -5,7 +5,6 @@ import java.awt.Choice;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
-import java.awt.Paint;
 import java.awt.event.ItemEvent;
 import java.awt.font.TextAttribute;
 import java.io.BufferedReader;
@@ -14,19 +13,19 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import javax.swing.JFileChooser;
-
-import createmarkerimages.BaseMarkerImageCreator;
 import data.Cell3D;
 import data.Cell3D_Group;
 import data.Coordinates;
+import data.NucleiSegmentationParameters;
 import data.Nucleus3D;
-import data.Spheroid;
+import data.spheroid.SphereIO;
+import data.spheroid.Spheroid;
 import featureextractor.measurements.CellMeasurer;
 import ij.IJ;
 import ij.ImagePlus;
@@ -34,13 +33,13 @@ import ij.Prefs;
 import ij.WindowManager;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.MessageDialog;
 import ij.measure.ResultsTable;
 import ij.plugin.ChannelSplitter;
 import ij.plugin.PlugIn;
 import ij.process.ImageConverter;
+import markerimagecreator.Marker_Image_Creator_3D;
 import migrationmodeanalysis.MigrationModeAnalyser;
-import utils.MyMath;
-import utils.NucleiDataVisualiser;
 
 /**
  * This plugins use the following plugins:] - MorpholibJ - Measure 3D - Particle analyzer 3D - Region adjacency graph - 3D ImageJ Suite - 3D Intensity measure - 3D Geometric measure - 3D Shape Measure
@@ -50,87 +49,7 @@ import utils.NucleiDataVisualiser;
  */
 public class Feature_Extractor_3D implements PlugIn
 {
-	private class Labeled_Coordinate
-	{
-		Coordinates coordinates;
-		int label;
-		int grayValue;
-		String migrationMode;
-
-
-		/**
-		 *
-		 * @param aLabel
-		 * @param aXValue
-		 * @param aYValue
-		 * @param aZValue
-		 */
-		public Labeled_Coordinate(final int aLabel, final Coordinates aCoordinates, final int aValue, final String aMigrationMode)
-		{
-			this.coordinates = aCoordinates;
-			this.label = aLabel;
-			this.grayValue = aValue;
-			this.migrationMode = aMigrationMode;
-		}
-
-
-		public Coordinates getCoordinates()
-		{
-			return this.coordinates;
-		}
-
-
-		public int getGrayValue()
-		{
-			return this.grayValue;
-		}
-
-
-		/**
-		 * @return the label of the Labled_Coordinate
-		 */
-		public int getLabel()
-		{
-			return this.label;
-		}
-
-
-		public String getMigrationMode()
-		{
-			return this.migrationMode;
-		}
-
-
-		public double getXCoordinate()
-		{
-			return this.coordinates.getXcoordinate();
-		}
-
-
-		public double getYCoordinate()
-		{
-			return this.coordinates.getYcoordinate();
-		}
-
-
-		public double getZCoordinate()
-		{
-			return this.coordinates.getZcoordinate();
-		}
-
-
-		/**
-		 * @return: label (xValue, yValue, zValue) value
-		 */
-		@Override
-		public String toString()
-		{
-			final String toString = this.label + " (" + getXCoordinate() + "," + getYCoordinate() + "," + getZCoordinate() + ") " + this.grayValue;
-			return toString;
-		}
-	}
-
-	private class TypedChannel
+	private static class TypedChannel
 	{
 		public int channelNr;
 		public ImagePlus channelImage;
@@ -144,14 +63,14 @@ public class Feature_Extractor_3D implements PlugIn
 		}
 	}
 
-	private static final String INPUTDIR_PREF = "Feature_Extractor_3D.InputDir";
-	private static final String OUTPUTDIR_PREF = "Feature_Extractor_3D.OutputDir";
+	// Positions of accuracy values in the marker accuracy array
+	public static final int MARKER_OK = 0, MARKER_DOUBLE = 1, MARKER_NONUC = 2, MARKER_EX = 3, MARKER_DQ = 4;
 
 	private static final String NONE = "None";
 	private static final String NO_CHANNEL = "0";
 
-	private static final int BIN_TOTAL = 20;
 	public static final String NUCLEAR = "Nuclear";
+	public static final String NUCLEUS_SURROUND = "Nucleus surrounding";
 	public static final String CELL = "Cell";
 	public static final String CELL_NONUCLEUS = "Cell without the nucleus";
 	public static final String NUCLEAR_CENTER = "Nuclear centre";
@@ -164,12 +83,14 @@ public class Feature_Extractor_3D implements PlugIn
 	private ImagePlus resultImage;
 	private ImagePlus dapiSegments;
 	private ImagePlus actinSegments;
-	private double[][] amountOfNuclei;
-	private double[] amountOfNucleiMigration;
 	private boolean saveImages;
 	private boolean excludeBorderNuclei;
 	private boolean excludeTooSmallNuclei;
 	private boolean manualMarkers;
+	private File originalDir;
+	private File workingDir;
+	private Integer smallNucleusSize;
+	private Integer exclusionZone;
 
 
 	/**
@@ -202,7 +123,7 @@ public class Feature_Extractor_3D implements PlugIn
 					{
 						markersInExcludedNucleus++;
 					}
-					if (nucleus.isDisqualified())
+					else if (nucleus.isDisqualified())
 					{
 						markersInDisqualifiedNucleus++;
 					}
@@ -227,34 +148,13 @@ public class Feature_Extractor_3D implements PlugIn
 				markersWithoutNucleus++;
 			}
 		}
-		final int[] result = { markersInNucleus, markersDoubleInNucleus, markersWithoutNucleus, markersInExcludedNucleus, markersInDisqualifiedNucleus };
+		final int[] result = new int[5];
+		result[MARKER_OK] = markersInNucleus;
+		result[MARKER_DOUBLE] = markersDoubleInNucleus;
+		result[MARKER_NONUC] = markersWithoutNucleus;
+		result[MARKER_EX] = markersInExcludedNucleus;
+		result[MARKER_DQ] = markersInDisqualifiedNucleus;
 		return result;
-	}
-
-
-	/**
-	 * Match the list of seeds to the list of cells and set the seed data in the corresponding cell.
-	 *
-	 * @param aSeeds
-	 *            A list of seed markers as Labeled_Coordinates
-	 * @param aCells
-	 *            An array of Cell3Ds
-	 */
-	private void countSeedsAndAddToNucleus(final List<Labeled_Coordinate> aSeeds, final Cell3D[] aCells)
-	{
-		for (final Labeled_Coordinate seed : aSeeds)
-		{
-			for (final Cell3D cell : aCells)
-			{
-				final Nucleus3D nucleus = cell.getNucleus();
-				// If the nucleus and the seed contains the same value the seeds is added to the nucleus
-				if (seed.getLabel() == nucleus.getLabel())
-				{
-					nucleus.setSeed(seed.getCoordinates(), seed.getGrayValue());
-					break;
-				}
-			}
-		}
 	}
 
 
@@ -268,11 +168,9 @@ public class Feature_Extractor_3D implements PlugIn
 	 */
 	private ImagePlus createBackgroundResultImages(final ImagePlus aImage)
 	{
-
 		// Create results image with the original image as background
 		final ImageConverter con = new ImageConverter(aImage);
 		con.convertToRGB();
-		aImage.setTitle("Nucleus outlines");
 
 		// Create result image with black background
 		final int height = aImage.getHeight();
@@ -289,59 +187,29 @@ public class Feature_Extractor_3D implements PlugIn
 
 
 	/**
-	 * Collect the spheroid information. Currently the user has to pick a few points to distill a sphere from. The points should be on the edge of the spheroid and one set of three points should be in the X/Y plane while the other set should be in
-	 * the Y/Z plane.
+	 * Add any non-standard functionality that will be done after the standard measurements and results have been handled.
 	 *
-	 * @return The Spheroid that can be constructed based on the two intersecting circles that are deduced from the points given.
+	 * @param aCells
+	 *            The list of detected cells
+	 * @param aSpheroid
+	 *            The spheroid information, if any
 	 */
-	private Spheroid getSpheroidInformation()
+	private void doAfterStandard(final Cell3D[] aCells, final Spheroid aSpheroid, final ImagePlus aResultsImage)
 	{
-		// Calculate the z to x/y ratio to get the proper fit
-		final double zFactor = this.dapiImage.getCalibration().pixelDepth / this.dapiImage.getCalibration().pixelWidth;
-
-		final GenericDialog parametersDialog = new GenericDialog("Coordinates input");
-		parametersDialog.addMessage("Please input three coordinates with a similar Z coordinate:");
-		parametersDialog.addStringField("Coordinate 1", "0.0\t0.0\t0.0", 20);
-		parametersDialog.addStringField("Coordinate 2", "0.0\t0.0\t0.0", 20);
-		parametersDialog.addStringField("Coordinate 3", "0.0\t0.0\t0.0", 20);
-		parametersDialog.addMessage("Please input three coordinates with a similar X coordinate:");
-		parametersDialog.addStringField("Coordinate 4", "0.0\t0.0\t0.0", 20);
-		parametersDialog.addStringField("Coordinate 5", "0.0\t0.0\t0.0", 20);
-		parametersDialog.addStringField("Coordinate 6", "0.0\t0.0\t0.0", 20);
-		parametersDialog.showDialog();
-
-		if (parametersDialog.wasOKed())
+		if (aSpheroid != null)
 		{
-			final Coordinates coord1 = stringToCoordinate(parametersDialog.getNextString());
-			final Coordinates coord2 = stringToCoordinate(parametersDialog.getNextString());
-			final Coordinates coord3 = stringToCoordinate(parametersDialog.getNextString());
-			final Coordinates coord4 = stringToCoordinate(parametersDialog.getNextString());
-			final Coordinates coord5 = stringToCoordinate(parametersDialog.getNextString());
-			final Coordinates coord6 = stringToCoordinate(parametersDialog.getNextString());
+			// if (this.alternateChannels != null && this.alternateChannels.size() == 4)
+			// {
+			// AfterExtractionReporter.doYAPReporting(aCells, 0, 1, this.saveImages ? this.workingDir : null);
+			// }
 
-			// Swap the x and z coordinates in the last set to get a proper circle estimate (which is based on the X/Y plane)
-			swapXZ(coord4);
-			swapXZ(coord5);
-			swapXZ(coord6);
-			Coordinates center = MyMath.circleCentre(coord4, coord5, coord6);
-
-			// Set the Y and Z coordinate based on the Y/Z circle centre
-			final Coordinates centerTot = new Coordinates(0, 0, 0);
-			centerTot.setYcoordinate(center.getYcoordinate());
-			centerTot.setZcoordinate(center.getXcoordinate() / zFactor);
-
-			// Get the circle estimate of the X?Y plane
-			center = MyMath.circleCentre(coord1, coord2, coord3);
-			centerTot.setXcoordinate(center.getXcoordinate());
-
-			// Middle the Y coordinate between the two circles for the best estimate
-			centerTot.setYcoordinate((center.getYcoordinate() + centerTot.getYcoordinate()) / 2);
-			final double radius = centerTot.distanceFromPoint(coord1);
-			return new Spheroid(centerTot, radius);
+			final ResultsTable karResults = ResultsTableGenerator.getKarolinskaResults(aCells);
+			final File directoryOutputFile = NucleiSegmentationParameters.getResultsDir(this.workingDir);
+			ResultsTableGenerator.saveResultsTable(getTitleWithoutExtension(this.dapiImage) + "_BriefOutput", directoryOutputFile, karResults);
+			// AfterExtractionReporter.doModeMigrationHistogram(aCells, this.saveImages ? this.workingDir : null);
+			final ImagePlus yapRatioImage = AfterExtractionReporter.drawYAPRatio(aCells, aResultsImage, 0, 1);
+			IJ.saveAs(yapRatioImage, "Tif", directoryOutputFile + File.separator + getTitleWithoutExtension(this.dapiImage) + "_Nucleus_Surroundings");
 		}
-
-		// Dialog was cancelled, return null.
-		return null;
 	}
 
 
@@ -365,24 +233,6 @@ public class Feature_Extractor_3D implements PlugIn
 
 
 	/**
-	 * Measure the images (segmented and parameter) based on a set of MorphoLibJ and MCIB3D measurements and return the list of measured cells.
-	 *
-	 * @param aImage
-	 *            The image to measure
-	 * @param aIndex
-	 *            The index of the segmented image that corresponds to the image
-	 * @return An array of Cell3D with the measurements
-	 */
-	private Cell3D[] measureFeatures()
-	{
-		final boolean[] particleMeasure = { true, true, true, true, true, true };
-		final boolean[] suite3DMeasure = { true, true, true, true, true, true, true, true, true, true, true, true, true, true };
-
-		return CellMeasurer.getMeasuredCells(this.dapiImage, this.actinImage, this.dapiSegments, this.actinSegments, this.calculateDams, particleMeasure, suite3DMeasure);
-	}
-
-
-	/**
 	 * From a list of marker-file names, select the file which matches the given image title and read the markers from the file. This produces two lists: one containing the marker Coordinates and one containing the Coordinates and all other info
 	 * contained in the marker file.
 	 *
@@ -390,6 +240,7 @@ public class Feature_Extractor_3D implements PlugIn
 	 *            The list of possible marker-file names
 	 * @param aReadCoordinates
 	 *            The list of coordinates that will be extended with the marker coordinates
+	 *
 	 * @return A list of Labeled_Coordinate containing all the marker coordinates of the marker file and their additional values such as the label and detection value.
 	 */
 	private List<Labeled_Coordinate> readMarkerFile(final File aMarkerFile, final List<Coordinates> aReadCoordinates)
@@ -410,29 +261,31 @@ public class Feature_Extractor_3D implements PlugIn
 					// Split line into columns
 					final String[] columns = line.split(splitter);
 					// Skip any line that starts with a space
-					if (!columns[0].contains(" "))
+					if (!columns[0].contains("Label"))
 					{
-						final int label = Float.valueOf(columns[1]).intValue();
-						final int xValue = Float.valueOf(columns[2]).intValue();
-						final int yValue = Float.valueOf(columns[3]).intValue();
+						final int label = Float.valueOf(columns[0]).intValue();
+						final int xValue = Float.valueOf(columns[1]).intValue();
+						final int yValue = Float.valueOf(columns[2]).intValue();
 
 						int zValue = 0;
 						if (getZ)
 						{
-							zValue = Float.valueOf(columns[4]).intValue();
+							zValue = Float.valueOf(columns[3]).intValue();
 						}
 
-						final int value = Float.valueOf(columns[5]).intValue();
+						final int value = Float.valueOf(columns[4]).intValue();
 						String migrationMode = "";
-						if (columns.length == 7)
+						if (columns.length == 6)
 						{
-							migrationMode = columns[6];
+							migrationMode = columns[5];
 						}
 						final Coordinates seed = new Coordinates(xValue, yValue, zValue);
 						aReadCoordinates.add(seed);
 						listofSeeds.add(new Labeled_Coordinate(label, seed, value, migrationMode));
 					}
 				}
+
+				br.close();
 			}
 			catch (final IOException ioe)
 			{
@@ -463,11 +316,10 @@ public class Feature_Extractor_3D implements PlugIn
 		File directoryOutputFile = null;
 		if (this.saveImages)
 		{
-			directoryOutputFile = selectDirectory("Select the directory where the results images need to be saved", OUTPUTDIR_PREF);
-			if (directoryOutputFile == null)
+			directoryOutputFile = NucleiSegmentationParameters.getResultsDir(this.workingDir);
+			if (!directoryOutputFile.exists())
 			{
-				// The user wants output, but selects no place to save it. Does not compute.
-				return;
+				directoryOutputFile.mkdir();
 			}
 		}
 
@@ -480,23 +332,11 @@ public class Feature_Extractor_3D implements PlugIn
 			return;
 		}
 
-		// Experimental: get the data on the spheroid from the user.
-		final Spheroid spheroid = getSpheroidInformation();
-
-		// Measure all the features of the detected cells/nuclei
-		final String segmentationTitle = getTitleWithoutExtension(this.dapiSegments);
-		IJ.log("Analyze 3D: " + segmentationTitle);
-		final Cell3D[] cells = measureFeatures();
-
-		// Before measuring, detect any cells that fail to meet the desired standards.
-		PostProcessor.postProcessCellList(cells, this.dapiImage, this.excludeBorderNuclei, this.excludeTooSmallNuclei);
-
-		// Create names which will be used to name and save the files
-		final String shortTitleFile = segmentationTitle.substring(segmentationTitle.indexOf("MCWatershed") + 12, segmentationTitle.length());
-
+		IJ.log("Read markers");
 		// Extract all the seeds that are created by the Point detection method and add them to the nucleus
 		final List<Coordinates> seedCoords = new ArrayList<>();
-		final String seedFileName = BaseMarkerImageCreator.createOutputFileName(this.dapiImage, BaseMarkerImageCreator.MEXICANHAT);
+		final List<Coordinates> markerCoords = new ArrayList<>();
+		final String seedFileName = Marker_Image_Creator_3D.createMarkerFileName(this.dapiImage, Marker_Image_Creator_3D.LOG);
 		File seedFile = null;
 		for (final File markers : markerFileNames)
 		{
@@ -507,13 +347,19 @@ public class Feature_Extractor_3D implements PlugIn
 			}
 		}
 		final List<Labeled_Coordinate> listOfSeeds = readMarkerFile(seedFile, seedCoords);
-		countSeedsAndAddToNucleus(listOfSeeds, cells);
+
+		// Measure all the features of the detected cells/nuclei
+		final String segmentationTitle = getTitleWithoutExtension(this.dapiSegments);
+		IJ.log("Analyze 3D: " + segmentationTitle);
+		final Cell3D[] cells = CellMeasurer.getMeasuredCells(this.dapiImage, this.actinImage, this.dapiSegments, this.actinSegments, listOfSeeds, this.calculateDams);
+
+		// Before measuring, detect any cells that fail to meet the desired standards.
+		PostProcessor.postProcessCellList(cells, this.dapiImage, this.excludeTooSmallNuclei ? this.smallNucleusSize : null, this.excludeBorderNuclei ? this.exclusionZone : null);
 
 		int[] markerResults = null;
-		List<Labeled_Coordinate> listOfMarkers = new ArrayList<>();
 		if (this.manualMarkers)
 		{
-			final String markerFileName = BaseMarkerImageCreator.createOutputFileName(this.dapiImage, BaseMarkerImageCreator.MANUALPOINTS);
+			final String markerFileName = Marker_Image_Creator_3D.createMarkerFileName(this.dapiImage, Marker_Image_Creator_3D.MANUALPOINTS);
 			File markerFile = null;
 			for (final File markers : markerFileNames)
 			{
@@ -523,20 +369,45 @@ public class Feature_Extractor_3D implements PlugIn
 					break;
 				}
 			}
-			listOfMarkers = readMarkerFile(markerFile, seedCoords);
-			markerResults = countMarkersAndAddToNucleus(listOfMarkers, cells);
+
+			if (markerFile != null)
+			{
+				final List<Labeled_Coordinate> listOfMarkers = readMarkerFile(markerFile, markerCoords);
+				markerResults = countMarkersAndAddToNucleus(listOfMarkers, cells);
+			}
+			else
+			{
+				final MessageDialog errorDialog = new MessageDialog(this.dapiImage.getWindow(), "Error: no manual markers!",
+						"Error: No manual marker file has been found, while it was selected to be used!");
+			}
 		}
 
+		File spheroidFile = null;
+		for (final File spheroid : this.originalDir.listFiles())
+		{
+			if (spheroid.getName().endsWith(SphereIO.SPHERE_TXT))
+			{
+				spheroidFile = spheroid;
+				break;
+			}
+		}
+		final double zFactor = this.dapiImage.getCalibration().pixelDepth / this.dapiImage.getCalibration().pixelWidth;
+		final Spheroid spheroid = SphereIO.readSpheroidFile(spheroidFile, zFactor);
 		if (spheroid != null)
 		{
+			IJ.log("Read spheroid and calculate migration distances");
 			setDistanceToSpheroid(cells, spheroid);
 		}
 
 		if (this.alternateChannels != null)
 		{
+			IJ.log("Measure additional channels:");
+			int i = 0;
 			for (final TypedChannel measureChannel : this.alternateChannels)
 			{
-				CellMeasurer.measureCoordinatesIntensity(measureChannel.channelImage, measureChannel.channelType, cells);
+				i = i + 1;
+				IJ.log("\tMeasure additional channel" + i);
+				CellMeasurer.measureCoordinatesIntensity(measureChannel.channelImage, this.actinSegments, measureChannel.channelType, cells);
 			}
 		}
 
@@ -544,44 +415,27 @@ public class Feature_Extractor_3D implements PlugIn
 		final ImagePlus blackImage = createBackgroundResultImages(this.resultImage);
 		Visualiser.drawNucleusResults(cells, this.resultImage, blackImage, this.dapiSegments);
 		Visualiser.drawMarkers(this.resultImage, seedCoords, Color.YELLOW, 3);
+		Visualiser.drawMarkers(this.resultImage, markerCoords, Color.GREEN, 3);
 
-		final Cell3D_Group nucleusGroup = new Cell3D_Group(cells[0]);
-		final Cell3D_Group nucleusGroupSelection = new Cell3D_Group(cells[0]);
-		for (int k = 1; k < cells.length; k++)
-		{
-			nucleusGroup.setMember(cells[k]);
-			if (!cells[k].getNucleus().isBorderNucleus() && !cells[k].getNucleus().isTooSmall())
-			{
-				nucleusGroupSelection.setMember(cells[k]);
-			}
-		}
+		final Cell3D_Group nucleusGroup = new Cell3D_Group(Arrays.asList(cells));
 
-		ResultsTable resultsperGroup = null;
+		ResultsTable resultsPerGroup = null;
+		double[][] migrationSetData = null;
+		double[] migrationAccuracyData = null;
 		if (runMigrationMode)
 		{
 			// TODO check if actin profiling needs to be used as an alternative
-			final MigrationModeAnalyser analysis = new MigrationModeAnalyser(this.dapiImage, nucleusGroupSelection, segmentationTitle);
-			final List<Cell3D_Group> cellGroups = analysis.getAnalyzedCellGroups();
-			// double maxVolume = 0;
-			// int maxLabel = 0;
-			// for (final Cell3D_Group group : cellGroups)
-			// {
-			// if (maxVolume < group.getTotalVolumeCell())
-			// {
-			// maxVolume = group.getTotalVolumeCell();
-			// maxLabel = group.getLabel();
-			// }
-			// }
-			this.amountOfNuclei = analysis.getAmountOfNuclei();
-			this.amountOfNucleiMigration = analysis.getAmountOfNucleiMigrationMode();
-			resultsperGroup = analysis.getResultsTableGroups();
+			final MigrationModeAnalyser analysis = new MigrationModeAnalyser(cells, this.dapiImage, segmentationTitle);
+			migrationSetData = analysis.getMigrationSetData();
+			migrationAccuracyData = analysis.getMigrationAccuracyData();
+			resultsPerGroup = analysis.getResultsPerCellGroup();
 			if (this.saveImages)
 			{
 				analysis.saveResultImages(directoryOutputFile);
 			}
 		}
 
-		final ResultsTable mergedTable = ResultsTableGenerator.summaryCellNucleusTable(cells);
+		final ResultsTable mergedTable = ResultsTableGenerator.getResultsPerNucleus(cells);
 		if (mergedTable == null)
 		{
 			IJ.log("ERROR: A nulceus segment can not be correlated to an automated nucleus marker");
@@ -593,20 +447,18 @@ public class Feature_Extractor_3D implements PlugIn
 		ResultsTable cellTable = null;
 		if (this.actinImage != null)
 		{
-			cellTable = ResultsTableGenerator.summaryCellTable(cells);
+			cellTable = ResultsTableGenerator.getResultsPerCell(cells, runMigrationMode);
 			cellTable.show("Results Per Cell");
 		}
 
-		final ResultsTable resultsSum = new ResultsTable();
-		ResultsTableGenerator.summaryOfTheImages(resultsSum, this.amountOfNuclei, this.amountOfNucleiMigration, nucleusGroup, listOfSeeds.size(), listOfMarkers.size(), markerResults,
-				segmentationTitle, runMigrationMode);
+		final ResultsTable resultsSum = ResultsTableGenerator.getImageSummary(migrationSetData, migrationAccuracyData, markerResults, nucleusGroup, listOfSeeds.size(), segmentationTitle);
 		resultsSum.show("Results summary");
 
 		if (this.saveImages)
 		{
-			if (resultsperGroup != null)
+			if (resultsPerGroup != null)
 			{
-				ResultsTableGenerator.saveResultsTable(segmentationTitle + "_ResultsPerGroup", directoryOutputFile, resultsperGroup);
+				ResultsTableGenerator.saveResultsTable(segmentationTitle + "_ResultsPerGroup", directoryOutputFile, resultsPerGroup);
 			}
 			ResultsTableGenerator.saveResultsTable(segmentationTitle + "_NucleusFeatures", directoryOutputFile, mergedTable);
 			if (cellTable != null)
@@ -621,50 +473,41 @@ public class Feature_Extractor_3D implements PlugIn
 		blackImage.changes = false;
 		blackImage.close();
 
-		if (spheroid != null)
+		final int height = this.resultImage.getHeight();
+		final int width = this.resultImage.getWidth();
+		final ImagePlus yapImage = IJ.createImage("Nucleus segments", "8-bit Black", width, height, this.resultImage.getNSlices());
+		doAfterStandard(cells, spheroid, yapImage);
+
+		// Save parameters
+		final Map<String, String> paramNames = new HashMap<>();
+		paramNames.put(NucleiSegmentationParameters.FE_MANUAL_MARKERS, this.manualMarkers + "");
+		paramNames.put(NucleiSegmentationParameters.FE_EXCLUDE_BORDER, this.excludeBorderNuclei + "");
+		if (this.excludeBorderNuclei)
 		{
-			final double radius = spheroid.getRadius();
-			final float[] migrationDists = new float[cells.length];
-			final Paint[] colours = new Paint[cells.length];
-			final float[][] cellData = new float[2][cells.length];
-			int cellNr = 0;
-			for (final Cell3D cell : cells)
-			{
-				cellData[0][cellNr] = (float) cell.getNucleus().getDistanceToCore();
-				cellData[1][cellNr] = (float) cell.getSignalMeasurements().get(0).getMeanIntensity();
-				cellData[1][cellNr] = cellData[1][cellNr] / (float) cell.getNucleus().getMeasurements().getMeanIntensity();
-				migrationDists[cellNr] = (float) cell.getNucleus().getDistanceToCore();
-				if (cell.getMigrationMode().equals(Cell3D_Group.SINGLE))
-				{
-					colours[cellNr] = Color.RED;
-				}
-				else
-				{
-					colours[cellNr] = Color.GREEN;
-				}
-				cellNr++;
-			}
-
-			NucleiDataVisualiser.plotData(cellData, colours, "Migration distance vs normalized actin density", "Migration distance", "Normalized actin density");
-			final double maxDist = MyMath.getMaximum(migrationDists);
-			final double stepSize = (maxDist + radius) / BIN_TOTAL;
-			final double[] bins = new double[BIN_TOTAL];
-			final double[] binNumbers = new double[BIN_TOTAL];
-			for (int i = 0; i < BIN_TOTAL; i++)
-			{
-				bins[i] = 0;
-				binNumbers[i] = -radius + (i * stepSize);
-			}
-
-			for (final double distance : migrationDists)
-			{
-				int bin = (int) ((distance + radius) / stepSize);
-				bin = bin == BIN_TOTAL ? bin - 1 : bin; // Make sure that the max value is in the last bin
-				bins[bin]++;
-			}
-
-			NucleiDataVisualiser.plotDistanceHistogram(binNumbers, bins, "Migration distance", "Migration distance (bin size = " + stepSize + ")", "Number of cells", null);
+			paramNames.put(NucleiSegmentationParameters.FE_BORDER_ZONE, this.exclusionZone + "");
 		}
+		paramNames.put(NucleiSegmentationParameters.FE_EXCLUDE_SIZE, this.excludeTooSmallNuclei + "");
+		if (this.excludeTooSmallNuclei)
+		{
+			paramNames.put(NucleiSegmentationParameters.FE_EXCLUSION_SIZE, this.smallNucleusSize + "");
+		}
+
+		final String[] additionalNames = NucleiSegmentationParameters.getAdditionalChannelParameterNames();
+		int channelNr = 0;
+		if (!this.alternateChannels.isEmpty())
+		{
+			for (final TypedChannel channel : this.alternateChannels)
+			{
+				paramNames.put(additionalNames[channelNr], channel.channelNr + "");
+				paramNames.put(additionalNames[channelNr + 1], channel.channelType + "");
+
+				channelNr += 2;
+			}
+		}
+
+		NucleiSegmentationParameters.writeToParametersFile(paramNames, true, this.workingDir);
+
+		IJ.log("End Feature Extraction");
 	}
 
 
@@ -717,52 +560,69 @@ public class Feature_Extractor_3D implements PlugIn
 	 */
 	private List<TypedChannel> selectChannels(final ImagePlus aImage)
 	{
-		final List<TypedChannel> resultChannels = new ArrayList<>();
+		final String[] channelPrefs = { Prefs.get(NucleiSegmentationParameters.FE_ADDITIONAL_CHANNEL_1, "0"), Prefs.get(NucleiSegmentationParameters.FE_ADDITIONAL_CHANNEL_2, "0"),
+				Prefs.get(NucleiSegmentationParameters.FE_ADDITIONAL_CHANNEL_3, "0"), Prefs.get(NucleiSegmentationParameters.FE_ADDITIONAL_CHANNEL_4, "0") };
+		final String[] measurePrefs = { Prefs.get(NucleiSegmentationParameters.FE_ADDITIONAL_MEASUREMENT_1, NUCLEAR), Prefs.get(NucleiSegmentationParameters.FE_ADDITIONAL_MEASUREMENT_2, NUCLEAR),
+				Prefs.get(NucleiSegmentationParameters.FE_ADDITIONAL_MEASUREMENT_3, NUCLEAR), Prefs.get(NucleiSegmentationParameters.FE_ADDITIONAL_MEASUREMENT_4, NUCLEAR) };
+		final String dapiChannelPref = Prefs.get(NucleiSegmentationParameters.NS_NUCLEUS_CHANNEL, "1");
+		final String actinChannelPref = Prefs.get(NucleiSegmentationParameters.NS_ACTIN_CHANNEL, "2");
+
 		final int channels = aImage.getNChannels();
-		final GenericDialog gd = new GenericDialog("Set channels");
+		final GenericDialog dialog = new GenericDialog("Set channels");
 		final String[] channelchooser = new String[channels + 1];
 		for (int i = 0; i <= channels; i++)
 		{
 			channelchooser[i] = i + "";
 		}
-		final String[] channelType = { NUCLEAR_CENTER, NUCLEAR, CELL, CELL_NONUCLEUS };
+		final String[] channelType = { NUCLEAR_CENTER, NUCLEAR, CELL, NUCLEUS_SURROUND, CELL_NONUCLEUS };
 
-		gd.addMessage("Please select which signal is on what image channel.\nSelect 0 to ignore a channel.");
-		gd.addChoice("Nucleus channel", channelchooser, channelchooser[1]);
-		gd.addChoice("Actin channel", channelchooser, channelchooser[0]);
-		final Component message = gd.getMessage();
+		dialog.addMessage("Please select which signal is on what image channel.\nSelect 0 to ignore a channel.");
+		dialog.addChoice("Nucleus channel", channelchooser, dapiChannelPref);
+		dialog.addChoice("Actin channel", channelchooser, actinChannelPref);
+		final Component message = dialog.getMessage();
 		final Font underlineFont = message.getFont();
 		final Map<TextAttribute, Object> attributes = new HashMap<>(underlineFont.getAttributes());
 		attributes.put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON);
 		attributes.put(TextAttribute.WEIGHT, TextAttribute.WEIGHT_BOLD);
-		gd.addMessage("Additional channels:", underlineFont.deriveFont(attributes));
+		dialog.addMessage("Additional channels:", underlineFont.deriveFont(attributes));
 		for (int i = 0; i < NR_OF_ADDITIONAL_CHANNELS; i++)
 		{
-			gd.addChoice("Additional channel " + (i + 1), channelchooser, channelchooser[i]);
-			gd.addChoice("Additional channel type " + (i + 1), channelType, channelType[i]);
+			dialog.addChoice("Additional channel " + (i + 1), channelchooser, channelPrefs[i]);
+			dialog.addChoice("Additional channel type " + (i + 1), channelType, measurePrefs[i]);
 		}
 
-		for (int i = 0; i < NR_OF_ADDITIONAL_CHANNELS - 1; i++)
+		@SuppressWarnings("unchecked")
+		final Vector<Choice> choices = dialog.getChoices();
+		boolean nonChoiceFound = false;
+		for (int i = 0; i < NR_OF_ADDITIONAL_CHANNELS; i++)
 		{
 			// Set all but the first additional channel choices to disabled
-			Choice nextChoice = (Choice) gd.getChoices().get((2 * i) + 4); // 4 = nucleus + actin + first additional channel + measure type
-			nextChoice.setEnabled(false);
-			// And the measure type choice as well
-			nextChoice = (Choice) gd.getChoices().get((2 * i) + 5);
-			nextChoice.setEnabled(false);
+			Choice nextChoice = choices.get((2 * i) + 2); // 2 = nucleus + actin
+			if (nextChoice.getSelectedItem().equals(NO_CHANNEL) && nonChoiceFound)
+			{
+				nextChoice.setEnabled(false);
+				// And the measure type choice as well
+				nextChoice = choices.get((2 * i) + 3);
+				nextChoice.setEnabled(false);
+			}
+			else if (nextChoice.getSelectedItem().equals(NO_CHANNEL))
+			{
+				nonChoiceFound = true;
+			}
 		}
 
-		gd.addDialogListener(new DialogListener()
+		dialog.addDialogListener(new DialogListener()
 		{
 			// This listener will enable and disable subsequent choices if a channel choice is (de)selected.
 			@Override
-			public boolean dialogItemChanged(final GenericDialog gd, final AWTEvent e)
+			public boolean dialogItemChanged(final GenericDialog aDialog, final AWTEvent aEvent)
 			{
-				if (e instanceof ItemEvent)
+				if (aEvent instanceof ItemEvent)
 				{
-					final Choice changedChoice = (Choice) ((ItemEvent) e).getItemSelectable();
+					final Choice changedChoice = (Choice) ((ItemEvent) aEvent).getItemSelectable();
 					int changedChoiceIndex = -1;
-					final Vector<Choice> choices = gd.getChoices();
+					@SuppressWarnings("unchecked")
+					final Vector<Choice> choices = aDialog.getChoices();
 
 					// First find the last enabled channel choice.
 					// Note that the first two choices are always nucleus and actin and next are a number of pairs of a channel choice and a type of measure
@@ -781,69 +641,58 @@ public class Feature_Extractor_3D implements PlugIn
 						}
 					}
 
-					if (lastEnabledIndex < choices.size() - 2 && changedChoiceIndex == lastEnabledIndex && !changedChoice.getSelectedItem().equals(NO_CHANNEL))
+					if (changedChoiceIndex > 1)
 					{
-						// The changed choice is the last enabled one, there are more choices after it (to enable) and it has been changed to a valid choice
-						// Enable the next two choices (one channel and one measure type)
-						choices.get(lastEnabledIndex + 2).setEnabled(true);
-						choices.get(lastEnabledIndex + 3).setEnabled(true);
-					}
-					else if (changedChoiceIndex != lastEnabledIndex && changedChoice.getSelectedItem().equals(NO_CHANNEL))
-					{
-						// A choice (not the last one) is set to no channel: clean up the following choices and disable them
-						for (int i = changedChoiceIndex + 2; i <= lastEnabledIndex; i = i + 2) // Start at the next channel choice and end at the last enabled one
+						if (lastEnabledIndex < choices.size() - 2 && changedChoiceIndex == lastEnabledIndex && !changedChoice.getSelectedItem().equals(NO_CHANNEL))
 						{
-							final Choice channelChoice = choices.get(i);
-							channelChoice.setEnabled(false);
-							channelChoice.select(NO_CHANNEL);
-							choices.get(i + 1).setEnabled(false);
+							// The changed choice is the last enabled one, there are more choices after it (to enable) and it has been changed to a valid choice
+							// Enable the next two choices (one channel and one measure type)
+							choices.get(lastEnabledIndex + 2).setEnabled(true);
+							choices.get(lastEnabledIndex + 3).setEnabled(true);
+						}
+						else if (changedChoiceIndex != lastEnabledIndex && changedChoice.getSelectedItem().equals(NO_CHANNEL))
+						{
+							// A choice (not the last one) is set to no channel: clean up the following choices and disable them
+							for (int i = changedChoiceIndex + 2; i <= lastEnabledIndex; i = i + 2) // Start at the next channel choice and end at the last enabled one
+							{
+								final Choice channelChoice = choices.get(i);
+								channelChoice.setEnabled(false);
+								channelChoice.select(NO_CHANNEL);
+								choices.get(i + 1).setEnabled(false);
+							}
 						}
 					}
-					gd.revalidate();
-					gd.repaint();
+					aDialog.revalidate();
+					aDialog.repaint();
 				}
 
 				return true;
 			}
 		});
 
-		gd.showDialog();
+		dialog.showDialog();
 
-		resultChannels.add(new TypedChannel(Integer.parseInt(gd.getNextChoice()), NUCLEAR));
-		resultChannels.add(new TypedChannel(Integer.parseInt(gd.getNextChoice()), CELL));
-		for (int i = 2; i < gd.getChoices().size(); i = i + 2)
+		final List<TypedChannel> resultChannels = new ArrayList<>();
+		resultChannels.add(new TypedChannel(Integer.parseInt(dialog.getNextChoice()), NUCLEAR));
+		resultChannels.add(new TypedChannel(Integer.parseInt(dialog.getNextChoice()), CELL));
+		for (int i = 2; i < dialog.getChoices().size(); i = i + 2)
 		{
-			resultChannels.add(new TypedChannel(Integer.parseInt(gd.getNextChoice()), gd.getNextChoice()));
+			resultChannels.add(new TypedChannel(Integer.parseInt(dialog.getNextChoice()), dialog.getNextChoice()));
 		}
+
+		Prefs.set(NucleiSegmentationParameters.NS_NUCLEUS_CHANNEL, resultChannels.get(0).channelNr);
+		Prefs.set(NucleiSegmentationParameters.NS_ACTIN_CHANNEL, resultChannels.get(1).channelNr);
+		Prefs.set(NucleiSegmentationParameters.FE_ADDITIONAL_CHANNEL_1, resultChannels.get(2).channelNr);
+		Prefs.set(NucleiSegmentationParameters.FE_ADDITIONAL_MEASUREMENT_1, resultChannels.get(2).channelType);
+		Prefs.set(NucleiSegmentationParameters.FE_ADDITIONAL_CHANNEL_2, resultChannels.get(3).channelNr);
+		Prefs.set(NucleiSegmentationParameters.FE_ADDITIONAL_MEASUREMENT_2, resultChannels.get(3).channelType);
+		Prefs.set(NucleiSegmentationParameters.FE_ADDITIONAL_CHANNEL_3, resultChannels.get(4).channelNr);
+		Prefs.set(NucleiSegmentationParameters.FE_ADDITIONAL_MEASUREMENT_3, resultChannels.get(4).channelType);
+		Prefs.set(NucleiSegmentationParameters.FE_ADDITIONAL_CHANNEL_4, resultChannels.get(5).channelNr);
+		Prefs.set(NucleiSegmentationParameters.FE_ADDITIONAL_MEASUREMENT_4, resultChannels.get(5).channelType);
+		Prefs.savePreferences();
+
 		return resultChannels;
-	}
-
-
-	/**
-	 * Select a directory (default based on a stored preference).
-	 *
-	 * @param aTitle
-	 *            The title of the selection Dialog
-	 * @param aPref
-	 *            The preference used to store the default dir's parent directory
-	 * @return The selected directory or null if none was selected
-	 */
-	private File selectDirectory(final String aTitle, final String aPref)
-	{
-		final String prefInputFile = Prefs.get(aPref, null);
-		final JFileChooser file = aPref == null ? new JFileChooser() : new JFileChooser(prefInputFile);
-		file.setDialogTitle(aTitle);
-		file.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-
-		if (file.showOpenDialog(IJ.getInstance()) == JFileChooser.CANCEL_OPTION)
-		{
-			return null;
-		}
-
-		final File directory = file.getSelectedFile();
-		Prefs.set(aPref, directory.getParent());
-
-		return directory;
 	}
 
 
@@ -854,21 +703,31 @@ public class Feature_Extractor_3D implements PlugIn
 	 */
 	private Boolean selectFeatureExtractionParameters()
 	{
+		final boolean migrationModeAnalysis = Prefs.get(NucleiSegmentationParameters.FE_MIGRATION_MODE_MEASURE, true);
+		final boolean dapiDams = Prefs.get(NucleiSegmentationParameters.WS_DAPI_DAMS, true);
+		final boolean actinDams = Prefs.get(NucleiSegmentationParameters.WS_ACTIN_DAMS, false);
+		final boolean excludeBorder = Prefs.get(NucleiSegmentationParameters.FE_EXCLUDE_BORDER, false);
+		final int borderZone = (int) Prefs.get(NucleiSegmentationParameters.FE_BORDER_ZONE, 3);
+		final boolean excludeSize = Prefs.get(NucleiSegmentationParameters.FE_EXCLUDE_SIZE, false);
+		final int exclusionSize = (int) Prefs.get(NucleiSegmentationParameters.FE_EXCLUSION_SIZE, 100);
+
 		final GenericDialog gd = new GenericDialog("Select available features");
 
 		gd.addMessage("Settings for the segments");
-		gd.addCheckbox("Segmented images are calculated with dams", true);
+		gd.addCheckbox("Segmented images are calculated with dams", dapiDams);
 
 		if (this.actinImage != null)
 		{
 			gd.addMessage("Settings for the Actin segments");
-			gd.addCheckbox("Migration Mode Analysis", false);
-			gd.addCheckbox("Segmented Images (Actin) are calculated with dams", false);
+			gd.addCheckbox("Migration Mode Analysis", migrationModeAnalysis);
+			gd.addCheckbox("Segmented Images (Actin) are calculated with dams", actinDams);
 		}
 
 		gd.addMessage("Settings for post processing");
-		gd.addCheckbox("Exclude cells with a nucleus touching/crossing any border of the image", true);
-		gd.addCheckbox("Exclude cells with a very small nucleus volume", true);
+		gd.addCheckbox("Exclude cells with a nucleus touching/crossing any border of the image", excludeBorder);
+		gd.addNumericField("Border exclusion zone width", borderZone, 0);
+		gd.addCheckbox("Exclude cells with a very small nucleus volume", excludeSize);
+		gd.addNumericField("Size exclusion volume", exclusionSize, 0);
 
 		gd.showDialog();
 		Boolean migrationMode = null;
@@ -876,16 +735,31 @@ public class Feature_Extractor_3D implements PlugIn
 		if (gd.wasOKed())
 		{
 			this.calculateDams[0] = gd.getNextBoolean();
-			migrationMode = gd.getNextBoolean();
 
 			if (this.actinImage != null)
 			{
+				migrationMode = gd.getNextBoolean();
 				this.calculateDams[1] = gd.getNextBoolean();
+			}
+			else
+			{
+				migrationMode = false;
 			}
 
 			this.excludeBorderNuclei = gd.getNextBoolean();
+			this.exclusionZone = Integer.valueOf((int) gd.getNextNumber());
 			this.excludeTooSmallNuclei = gd.getNextBoolean();
+			this.smallNucleusSize = Integer.valueOf((int) gd.getNextNumber());
 		}
+
+		Prefs.set(NucleiSegmentationParameters.FE_MIGRATION_MODE_MEASURE, migrationMode);
+		Prefs.set(NucleiSegmentationParameters.WS_DAPI_DAMS, this.calculateDams[0]);
+		Prefs.set(NucleiSegmentationParameters.WS_ACTIN_DAMS, this.calculateDams[1]);
+		Prefs.set(NucleiSegmentationParameters.FE_EXCLUDE_BORDER, this.excludeBorderNuclei);
+		Prefs.set(NucleiSegmentationParameters.FE_BORDER_ZONE, this.exclusionZone);
+		Prefs.set(NucleiSegmentationParameters.FE_EXCLUDE_SIZE, this.excludeTooSmallNuclei);
+		Prefs.set(NucleiSegmentationParameters.FE_EXCLUSION_SIZE, this.smallNucleusSize);
+		Prefs.savePreferences();
 
 		return migrationMode;
 	}
@@ -926,14 +800,15 @@ public class Feature_Extractor_3D implements PlugIn
 		}
 
 		// Select the directory where the marker files (not images) are located
-		final File directoryInputFile = selectDirectory("Select the directory where the marker files are located", INPUTDIR_PREF);
-		if (directoryInputFile == null)
+		this.workingDir = NucleiSegmentationParameters.getWorkingDirectory();
+		if (this.workingDir == null)
 		{
 			return null;
 		}
+		final File markerFilesDir = NucleiSegmentationParameters.getMarkerFilesDir(this.workingDir);
 
 		// Make an array with the file names in the selected folder to select the manual point file
-		final File[] filenamesFile = directoryInputFile.listFiles();
+		final File[] filenamesFile = markerFilesDir.listFiles();
 
 		return filenamesFile;
 	}
@@ -951,6 +826,9 @@ public class Feature_Extractor_3D implements PlugIn
 	{
 		ImagePlus originalImage = null;
 
+		final boolean saveImagesPref = Prefs.get(NucleiSegmentationParameters.FE_SAVE_RESULTS, false);
+		final boolean manualMarkersPref = Prefs.get(NucleiSegmentationParameters.FE_MANUAL_MARKERS, false);
+
 		while (originalImage == null)
 		{
 			final GenericDialog gd = new GenericDialog("Original image");
@@ -958,8 +836,8 @@ public class Feature_Extractor_3D implements PlugIn
 			gd.addChoice("Original image", aNames, aNames[0]);
 			gd.addChoice("Adjusted image for output", aNames, aNames[0]);
 			gd.addMessage(""); // Add an empty line for readability
-			gd.addCheckbox("Save the results", false);
-			gd.addCheckbox("Include manual markers", false);
+			gd.addCheckbox("Save the results", saveImagesPref);
+			gd.addCheckbox("Include manual markers", manualMarkersPref);
 			gd.showDialog();
 
 			if (gd.wasCanceled())
@@ -972,8 +850,13 @@ public class Feature_Extractor_3D implements PlugIn
 			this.saveImages = gd.getNextBoolean();
 			this.manualMarkers = gd.getNextBoolean();
 			originalImage = WindowManager.getImage(originalImageName);
+			this.originalDir = new File(originalImage.getOriginalFileInfo().directory);
 			this.resultImage = WindowManager.getImage(originalImageName2);
 		}
+
+		Prefs.set(NucleiSegmentationParameters.FE_SAVE_RESULTS, this.saveImages);
+		Prefs.set(NucleiSegmentationParameters.FE_MANUAL_MARKERS, this.manualMarkers);
+		Prefs.savePreferences();
 
 		// Check if the original image is a hyperstack or Z-Stack
 		// If it is a hyperstack, split the different channels
@@ -1096,52 +979,11 @@ public class Feature_Extractor_3D implements PlugIn
 	 */
 	private void setDistanceToSpheroid(final Cell3D[] aCells, final Spheroid aSpheroid)
 	{
-		final double zFactor = this.dapiImage.getCalibration().pixelDepth / this.dapiImage.getCalibration().pixelWidth;
 		for (final Cell3D cell : aCells)
 		{
 			final Nucleus3D nucleus = cell.getNucleus();
-			nucleus.setDistanceToCentre(nucleus.getSeed().correctedDistanceFromPoint(aSpheroid.getCentre(), zFactor));
-			nucleus.setDistanceToCore(nucleus.getDistanceToCentre() - aSpheroid.getRadius());
+			nucleus.setDistanceToCentre(aSpheroid.getDistanceFromPointWithZCoefficient(nucleus.getSeed()));
+			nucleus.setDistanceToCore(aSpheroid.getRadiusDistanceFromPointWithZCoefficient(nucleus.getSeed()));
 		}
-
-	}
-
-
-	/**
-	 * Split a String into three separate coordinates (x, y and z). The String can be split along the tab or comma characters.
-	 *
-	 * @param aString
-	 *            The String to split
-	 * @return The Coordinates object that can be constructed from the String
-	 */
-	private Coordinates stringToCoordinate(final String aString)
-	{
-		String[] coords;
-		if (aString.contains("\t"))
-		{
-			coords = aString.split("\t");
-		}
-		else
-		{
-			coords = aString.split(",");
-		}
-		final Coordinates result = new Coordinates(Double.parseDouble(coords[0]), Double.parseDouble(coords[1]), Double.parseDouble(coords[2]));
-		return result;
-	}
-
-
-	/**
-	 * Swap the X and Z coordinates of a set of Coordinates. Used to get a good circle estimate (method is based on X/Y plane).
-	 *
-	 * @param aCoordinates
-	 *            The target Coordinates. Note, these will actually be changed. No copy is made.
-	 */
-	private void swapXZ(final Coordinates aCoordinates)
-	{
-		final double zFactor = this.dapiImage.getCalibration().pixelDepth / this.dapiImage.getCalibration().pixelWidth;
-
-		final double temp = aCoordinates.getXcoordinate();
-		aCoordinates.setXcoordinate(aCoordinates.getZcoordinate() * zFactor);
-		aCoordinates.setZcoordinate(temp);
 	}
 }

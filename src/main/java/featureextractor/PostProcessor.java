@@ -5,6 +5,7 @@ import java.util.List;
 import data.Cell3D;
 import data.Coordinates;
 import data.Nucleus3D;
+import ij.IJ;
 import ij.ImagePlus;
 
 /**
@@ -12,9 +13,6 @@ import ij.ImagePlus;
  */
 public class PostProcessor
 {
-	private static final double MINIMUM_VOLUME = 800;
-
-
 	// /**
 	// * Method createLogisticRegressionTable, creates a logistic regression table which can be used to determine the logistic regression values.
 	// *
@@ -67,6 +65,25 @@ public class PostProcessor
 	// resultsStatistics.show("Results Statistics");
 	// }
 
+	private static void excludeBorderNucleiOnNuclearCentre(final Cell3D[] aCells, final int aWidth, final int aHeight, final int aDepth, final int aExclusionZone, final int aZFactor)
+	{
+		for (int i = 0; i < aCells.length; i++)
+		{
+			final Nucleus3D nucleus = aCells[i].getNucleus();
+			final Coordinates nucleusSeed = nucleus.getSeed();
+
+			if (nucleusSeed.getXcoordinate() < (aZFactor * aExclusionZone) || //
+					nucleusSeed.getXcoordinate() > aWidth - (aZFactor * aExclusionZone) || //
+					nucleusSeed.getYcoordinate() < (aZFactor * aExclusionZone) || //
+					nucleusSeed.getYcoordinate() > aHeight - (aZFactor * aExclusionZone) || //
+					(aDepth > 1 && (nucleusSeed.getZcoordinate() < aExclusionZone || nucleusSeed.getZcoordinate() >= aDepth - aExclusionZone)))
+			{
+				nucleus.setBorderNucleus(true);
+			}
+		}
+	}
+
+
 	/**
 	 * Detects if any of the nucleus outline coordinates is on one of the borders of the image (x, y or z). If so, the nucleus is set as a 'border' nucleus, which can be handled by further post processing.
 	 *
@@ -79,7 +96,7 @@ public class PostProcessor
 	 * @param aSlices
 	 *            The depth of the image, to determine the x border
 	 */
-	private static void excludeBorderNuclei(final Cell3D[] aCells, final int aWidth, final int aHeight, final int aDepth)
+	private static void excludeBorderNucleiOnTouch(final Cell3D[] aCells, final int aWidth, final int aHeight, final int aDepth)
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
@@ -107,14 +124,15 @@ public class PostProcessor
 	 *
 	 * @param aCells
 	 *            The cells to be checked.
+	 * @param aSmallNucleiSize
 	 */
-	private static void excludeNucleusOnSize(final Cell3D[] aCells)
+	private static void excludeNucleusOnSize(final Cell3D[] aCells, final Integer aSmallNucleiSize)
 	{
 		for (final Cell3D cell : aCells)
 		{
 			final Nucleus3D nucleus = cell.getNucleus();
 			final double volume = nucleus.getVolume();
-			if (volume < MINIMUM_VOLUME)
+			if (volume < aSmallNucleiSize)
 			{
 				nucleus.setTooSmall(true);
 			}
@@ -130,21 +148,23 @@ public class PostProcessor
 	 *            The list of Cell3Ds to be filtered
 	 * @param aImage
 	 *            The ImagePlus image in which the cells have been detected
-	 * @param aExcludeBorderNuclei
-	 *            Should the cells be filtered on border exclusion?
-	 * @param aExcludeTooSmallNuclei
-	 *            Should the cells be filtered on size?
+	 * @param aSmallNucleiSize
+	 *            What is the minimum size of nucleus segments to be used in further calculations? Can be null if no exclusion on size is needed
+	 * @param aExclusionZone
+	 *            How close to the edge are nucleus seeds still viable? Can be null if no exclusion on border adjacency is needed
 	 */
-	public static void postProcessCellList(final Cell3D[] aCells, final ImagePlus aImage, final boolean aExcludeBorderNuclei, final boolean aExcludeTooSmallNuclei)
+	public static void postProcessCellList(final Cell3D[] aCells, final ImagePlus aImage, final Integer aSmallNucleiSize, final Integer aExclusionZone)
 	{
-		if (aExcludeTooSmallNuclei)
+		if (aSmallNucleiSize != null)
 		{
-			excludeNucleusOnSize(aCells);
+			IJ.log("Excluding cells on nucleus size");
+			excludeNucleusOnSize(aCells, aSmallNucleiSize);
 		}
 
-		if (aExcludeBorderNuclei)
+		if (aExclusionZone != null)
 		{
-			excludeBorderNuclei(aCells, aImage.getWidth(), aImage.getHeight(), aImage.getNSlices());
+			IJ.log("Excluding cells on border placement");
+			excludeBorderNucleiOnNuclearCentre(aCells, aImage.getWidth(), aImage.getHeight(), aImage.getNSlices(), aExclusionZone, 2);
 		}
 		// TODO logistic regression?
 	}

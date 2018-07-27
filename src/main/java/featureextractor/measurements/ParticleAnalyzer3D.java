@@ -1,6 +1,9 @@
 package featureextractor.measurements;
 
+import configuration.Measurement_Selector;
 import data.Cell3D;
+import data.SegmentMeasurements;
+import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.measure.Calibration;
@@ -60,8 +63,9 @@ class ParticleAnalyzer3D
 	}
 
 
-	public static void runParticleAnalyzer3D(final Cell3D[] aCells, final boolean[] aMeasurementChoice, final ImagePlus aOriginalImage, final ImagePlus aLabelImage, final int[] aLabels)
+	public static void runParticleAnalyzer3D(final Cell3D[] aCells, final ImagePlus aOriginalImage, final ImagePlus aLabelImage, final int[] aLabels)
 	{
+		IJ.log("Start ParticleAnalyzer3D");
 		final ImageStack inputStack = aLabelImage.getImageStack();
 		final Calibration calibration = aOriginalImage.getCalibration();
 
@@ -73,30 +77,31 @@ class ParticleAnalyzer3D
 			resol[2] = calibration.pixelDepth;
 		}
 
-		if (aMeasurementChoice[0])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.SURFACE_AREA))
 		{
 			setSurfaces(aCells, inputStack, aLabels, resol);
 		}
-		if (aMeasurementChoice[1])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.SPHERICITY_MORPHOLIBJ))
 		{
 			setSphericities(aCells, inputStack, aLabels, resol);
 		}
-		if (aMeasurementChoice[2])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.EULER_NUMBER))
 		{
 			setEulerNumber(aCells, inputStack, aLabels);
 		}
-		if (aMeasurementChoice[3])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.ELLIPSOID_CENTER_X) || Measurement_Selector.getMeasurementPreference(SegmentMeasurements.ELLIPSOID_RADIUS_1))
 		{
 			setEllipsoid(aCells, inputStack, aLabels, resol);
 		}
-		if (aMeasurementChoice[4])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.ELLOGATION_R1_R2))
 		{
 			setElongations(aCells, inputStack, aLabels, resol);
 		}
-		if (aMeasurementChoice[5])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.INSCRIBED_SPHERE_CENTER_X) || Measurement_Selector.getMeasurementPreference(SegmentMeasurements.INSCRIBED_SPHERE_RADIUS))
 		{
 			setInscribedSphere(aCells, inputStack, aLabels, resol);
 		}
+		IJ.log("Ended ParticleAnalyzer3D");
 	}
 
 
@@ -113,7 +118,15 @@ class ParticleAnalyzer3D
 		final double[][] ellipsoids = GeometricMeasures3D.inertiaEllipsoid(aInputStack, aLables, aResol);
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setEllipsoids(ellipsoids[i]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_CENTER_X, ellipsoids[i][0]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_CENTER_Y, ellipsoids[i][1]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_CENTER_Z, ellipsoids[i][2]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_RADIUS_1, ellipsoids[i][3]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_RADIUS_2, ellipsoids[i][4]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_RADIUS_3, ellipsoids[i][5]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_RADIUS_AZIMUT, ellipsoids[i][6]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_RADIUS_ELEVATION, ellipsoids[i][7]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLIPSOID_RADIUS_ROLL, ellipsoids[i][8]);
 		}
 	}
 
@@ -128,7 +141,9 @@ class ParticleAnalyzer3D
 		final double[][] elongations = GeometricMeasures3D.computeEllipsoidElongations(getEllipsoid(aInputStack, aLables, aResol));
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setElongations(elongations[i]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLOGATION_R1_R2, elongations[i][0]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLOGATION_R1_R3, elongations[i][1]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELLOGATION_R2_R3, elongations[i][2]);
 		}
 	}
 
@@ -144,7 +159,7 @@ class ParticleAnalyzer3D
 		final double[] eulerNumbers = GeometricMeasures3D.eulerNumber(aInputStack, aLables, connectivity);
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setEulerNumber(eulerNumbers[i]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.EULER_NUMBER, eulerNumbers[i]);
 		}
 	}
 
@@ -160,7 +175,10 @@ class ParticleAnalyzer3D
 		final double[][] inscribedSphere = GeometricMeasures3D.maximumInscribedSphere(aInputStack, aLables, aResol);
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setInscribedSphere(inscribedSphere[i]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.INSCRIBED_SPHERE_CENTER_X, inscribedSphere[i][0]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.INSCRIBED_SPHERE_CENTER_Y, inscribedSphere[i][1]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.INSCRIBED_SPHERE_CENTER_Z, inscribedSphere[i][2]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.INSCRIBED_SPHERE_RADIUS, inscribedSphere[i][3]);
 		}
 	}
 
@@ -177,7 +195,7 @@ class ParticleAnalyzer3D
 		final double[] sphericities = GeometricMeasures3D.computeSphericity(getVolumes(aInputStack, aLables, aResol), getSurfaces(aInputStack, aLables, aResol));
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setSphericities(sphericities[i]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.SPHERICITY_MORPHOLIBJ, sphericities[i]);
 		}
 	}
 
@@ -194,7 +212,7 @@ class ParticleAnalyzer3D
 		final double[] surfaces = GeometricMeasures3D.surfaceAreaCrofton(aInputStack, aLables, aResol, surfaceAreaDirs);
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setSurfaceArea(surfaces[i]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.SURFACE_AREA, surfaces[i]);
 		}
 	}
 }

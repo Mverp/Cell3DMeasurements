@@ -78,7 +78,7 @@ public final class Visualiser
 	 * @param aNucleusCoordinates
 	 *            The coordinates for every pixel of the nucleus
 	 */
-	private static void draw3DNucleus(final ImageStack aImage, final int aColour, final List<Coordinates> aNucleusCoordinates)
+	public static void draw3DNucleus(final ImageStack aImage, final int aColour, final List<Coordinates> aNucleusCoordinates)
 	{
 		// Draw the outline on a 3D image or 2D image
 		for (int m = 0; m < aNucleusCoordinates.size(); m++)
@@ -118,51 +118,17 @@ public final class Visualiser
 
 			for (final Cell3D cell : cellGroup.getMembers())
 			{
+				final int colour = randomColour.getRGB();
 				for (final Coordinates coord : cell.getOutline())
 				{
 					final int x = (int) coord.getXcoordinate();
 					final int y = (int) coord.getYcoordinate();
 					final int z = (int) coord.getZcoordinate();
-					groupedImageStack.setVoxel(x, y, z, randomColour.getRGB());
+					groupedImageStack.setVoxel(x, y, z, colour);
 				}
 			}
 		}
 		aImage.updateAndDraw();
-	}
-
-
-	/**
-	 * Draw a circle (2D) at each of the coordinates in the list.
-	 *
-	 * @param aImage
-	 *            The image (2D/3D) on which to draw
-	 * @param aListOfSeeds
-	 *            The list of Coordinates
-	 * @param aColour
-	 *            The colour in which the circle will be drawn
-	 * @param aDiameter
-	 *            The diameter of the circle (in pixels)
-	 */
-	static public void drawMarkers(final ImagePlus aImage, final List<Coordinates> aListOfSeeds, final Color aColour, final int aDiameter)
-	{
-
-		// Create of each Coordinate a Roi and draw this in the image
-		for (int i = 0; i < aImage.getNSlices(); i++)
-		{
-			final ImageProcessor imageOutlineProc = aImage.getImageStack().getProcessor(i + 1);
-			for (int j = 0; j < aListOfSeeds.size(); j++)
-			{
-				if (aListOfSeeds.get(j).getZcoordinate() == i)
-				{
-					final int radius = aDiameter / 2;
-					aImage.setSlice(i + 1);
-					aImage.setRoi(new OvalRoi(aListOfSeeds.get(j).getXcoordinate() - radius, aListOfSeeds.get(j).getYcoordinate() - radius, aDiameter, aDiameter));
-					final Roi roi = aImage.getRoi();
-					imageOutlineProc.setColor(aColour);
-					imageOutlineProc.draw(roi);
-				}
-			}
-		}
 	}
 
 
@@ -256,6 +222,7 @@ public final class Visualiser
 					cor1 = new Coordinates(line.getXY(zCoord1)[0], line.getXY(zCoord1)[1], zCoord2);
 					cor2 = new Coordinates(line.getXY(zCoord2)[0], line.getXY(zCoord2)[1], zCoord2);
 				}
+				// TODO : What if neither of the above is true???
 				final Line roi = new Line(cor1.getXcoordinate(), cor1.getYcoordinate(), cor2.getXcoordinate(), cor2.getYcoordinate());
 				roi.setStrokeWidth(1);
 				imageDraw.setSlice((int) (cor1.getZcoordinate() + 1));
@@ -272,6 +239,41 @@ public final class Visualiser
 			final ImageProcessor imageDrawProc = imageDraw.getProcessor();
 			imageDrawProc.setColor(color);
 			imageDrawProc.draw(roi);
+		}
+	}
+
+
+	/**
+	 * Draw a circle (2D) at each of the coordinates in the list.
+	 *
+	 * @param aImage
+	 *            The image (2D/3D) on which to draw
+	 * @param aListOfSeeds
+	 *            The list of Coordinates
+	 * @param aColour
+	 *            The colour in which the circle will be drawn
+	 * @param aDiameter
+	 *            The diameter of the circle (in pixels)
+	 */
+	static public void drawMarkers(final ImagePlus aImage, final List<Coordinates> aListOfSeeds, final Color aColour, final int aDiameter)
+	{
+
+		// Create of each Coordinate a Roi and draw this in the image
+		for (int i = 0; i < aImage.getNSlices(); i++)
+		{
+			final ImageProcessor imageOutlineProc = aImage.getImageStack().getProcessor(i + 1);
+			for (int j = 0; j < aListOfSeeds.size(); j++)
+			{
+				if (aListOfSeeds.get(j).getZcoordinate() == i)
+				{
+					final int radius = aDiameter / 2;
+					aImage.setSlice(i + 1);
+					aImage.setRoi(new OvalRoi(aListOfSeeds.get(j).getXcoordinate() - radius, aListOfSeeds.get(j).getYcoordinate() - radius, aDiameter, aDiameter));
+					final Roi roi = aImage.getRoi();
+					imageOutlineProc.setColor(aColour);
+					imageOutlineProc.draw(roi);
+				}
+			}
 		}
 	}
 
@@ -301,7 +303,7 @@ public final class Visualiser
 			final String migrationModeGroup = cellGroup.getMigrationmode();
 			if (migrationModeGroup.equals("UNKNOWN"))
 			{
-				colour = Color.BLUE.getRGB();
+				colour = Color.YELLOW.getRGB();
 			}
 			else if (migrationModeGroup.equals("SINGLE_CELL"))
 			{
@@ -317,7 +319,7 @@ public final class Visualiser
 			}
 			else
 			{
-				colour = Color.WHITE.getRGB();
+				colour = Color.BLUE.getRGB();
 			}
 
 			for (final Cell3D cell : cellGroup.getMembers())
@@ -329,6 +331,13 @@ public final class Visualiser
 					final int z = (int) coord.getZcoordinate();
 					resultsImageBlackStack.setVoxel(x, y, z, colour);
 				}
+				// for (final Coordinates coord : cell.getNucleus().getNucleusCoordinates())
+				// {
+				// final int x = (int) coord.getXcoordinate();
+				// final int y = (int) coord.getYcoordinate();
+				// final int z = (int) coord.getZcoordinate();
+				// resultsImageBlackStack.setVoxel(x, y, z, colour);
+				// }
 			}
 		}
 

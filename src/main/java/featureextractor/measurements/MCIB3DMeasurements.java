@@ -2,7 +2,10 @@ package featureextractor.measurements;
 
 import java.util.ArrayList;
 
+import configuration.Measurement_Selector;
 import data.Cell3D;
+import data.SegmentMeasurements;
+import ij.IJ;
 import ij.ImagePlus;
 import ij.measure.Calibration;
 import mcib3d.image3d.ImageInt;
@@ -28,7 +31,7 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setAreaPixels(aResBase.get(i)[3]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.SURFACE_IN_PIXELS, aResBase.get(i)[3]);
 		}
 	}
 
@@ -42,7 +45,7 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setAreaUnit(aResBase.get(i)[4]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.SURFACE_IN_UNITS, aResBase.get(i)[4]);
 		}
 	}
 
@@ -56,7 +59,7 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setCompactness(aRes.get(i)[1]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.COMPACTNESS, aRes.get(i)[1]);
 		}
 	}
 
@@ -71,7 +74,7 @@ class MCIB3DMeasurements
 
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setElongatio(aRes.get(i)[3]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.ELONGATIO, aRes.get(i)[3]);
 		}
 	}
 
@@ -85,21 +88,7 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setFlatness(aRes.get(i)[4]);
-		}
-	}
-
-
-	/**
-	 * Method getGraySTDValue calculate the graySTDValue and add to the nucleus
-	 *
-	 * @param aLables
-	 */
-	private static void getGraySTDValue(final Cell3D[] aCells, final ArrayList<double[]> aResIntens)
-	{
-		for (int i = 0; i < aCells.length; i++)
-		{
-			aCells[i].getNucleus().getMeasurements().setStandardDeviation3D(aResIntens.get(i)[1]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.FLATNESS, aRes.get(i)[4]);
 		}
 	}
 
@@ -113,49 +102,7 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setIntegratedDensity3D(aResIntens.get(i)[4]);
-		}
-	}
-
-
-	/**
-	 * Method getMaxGrayValue calculate the maxGrayValue and add to the nucleus
-	 *
-	 * @param aLables
-	 */
-	private static void getMaxGrayValue(final Cell3D[] aCells, final ArrayList<double[]> aResIntens)
-	{
-		for (int i = 0; i < aCells.length; i++)
-		{
-			aCells[i].getNucleus().getMeasurements().setMaximum3D(aResIntens.get(i)[3]);
-		}
-	}
-
-
-	/**
-	 * Method getMeanGrayValue calculate the meanGrayValue and add to the nucleus
-	 *
-	 * @param aLables
-	 */
-	private static void getMeanGrayValue(final Cell3D[] aCells, final ArrayList<double[]> aResIntens)
-	{
-		for (int i = 0; i < aCells.length; i++)
-		{
-			aCells[i].getNucleus().getMeasurements().setMeanIntensity3D(aResIntens.get(i)[0]);
-		}
-	}
-
-
-	/**
-	 * Method getMinGrayValue calculate the minGrayValue and add to the nucleus
-	 *
-	 * @param aLables
-	 */
-	private static void getMinGrayValue(final Cell3D[] aCells, final ArrayList<double[]> aResIntens)
-	{
-		for (int i = 0; i < aCells.length; i++)
-		{
-			aCells[i].getNucleus().getMeasurements().setMinimum3D(aResIntens.get(i)[2]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.INTEGRATED_DENSITY, aResIntens.get(i)[4]);
 		}
 	}
 
@@ -169,7 +116,7 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setSpareness(aRes.get(i)[5]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.SPARENESS, aRes.get(i)[5]);
 		}
 	}
 
@@ -183,7 +130,7 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setSphericity(aRes.get(i)[2]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.SPHERICITY_MCIB3D, aRes.get(i)[2]);
 		}
 	}
 
@@ -197,7 +144,7 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setVolumePixels(aResBase.get(i)[1]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.VOLUME_IN_PIXELS, aResBase.get(i)[1]);
 		}
 	}
 
@@ -211,13 +158,15 @@ class MCIB3DMeasurements
 	{
 		for (int i = 0; i < aCells.length; i++)
 		{
-			aCells[i].getNucleus().getMeasurements().setVolumeUnit(aResBase.get(i)[2]);
+			aCells[i].getNucleus().getMeasurements().setMeasurement(SegmentMeasurements.VOLUME_IN_UNITS, aResBase.get(i)[2]);
 		}
 	}
 
 
-	public static void setMeasurements(final Cell3D[] aCells, final boolean[] aMeasurementChoice, final ImagePlus aOriginalImage, final ImagePlus aLabelImage)
+	public static void setMeasurements(final Cell3D[] aCells, final ImagePlus aOriginalImage, final ImagePlus aLabelImage)
 	{
+		IJ.log("Start MCIB 3D measurements");
+
 		final Calibration cal = aOriginalImage.getCalibration();
 		// Create a scaled image
 		final ImagePlus labeldImageScaled = aLabelImage.duplicate();
@@ -241,64 +190,50 @@ class MCIB3DMeasurements
 		final ArrayList<double[]> res = mes.getMeasuresShape();
 		final ArrayList<double[]> resIntens = mes.getMeasuresStats(aOriginalImage);
 
-		if (aMeasurementChoice[0])
-		{
-			getMeanGrayValue(aCells, resIntens);
-		}
-		if (aMeasurementChoice[1])
-		{
-			getGraySTDValue(aCells, resIntens);
-		}
-		if (aMeasurementChoice[2])
-		{
-			getMinGrayValue(aCells, resIntens);
-		}
-		if (aMeasurementChoice[3])
-		{
-			getMaxGrayValue(aCells, resIntens);
-		}
-		if (aMeasurementChoice[4])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.INTEGRATED_DENSITY))
 		{
 			getIntegratedDensity(aCells, resIntens);
 		}
-		if (aMeasurementChoice[5])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.VOLUME_IN_PIXELS))
 		{
 			getVolumePixels(aCells, resBase);
 		}
-		if (aMeasurementChoice[6])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.VOLUME_IN_UNITS))
 		{
 			getVolumeUnit(aCells, resBase);
 		}
-		if (aMeasurementChoice[7])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.SURFACE_IN_PIXELS))
 		{
 			getAreaPixels(aCells, resBase);
 		}
-		if (aMeasurementChoice[8])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.SURFACE_IN_UNITS))
 		{
 			getAreaUnit(aCells, resBase);
 		}
-		if (aMeasurementChoice[9])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.COMPACTNESS))
 		{
 			getCompactness(aCells, res);
 		}
-		if (aMeasurementChoice[10])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.SPHERICITY_MCIB3D))
 		{
 			getSphericity(aCells, res);
 		}
-		if (aMeasurementChoice[11])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.ELONGATIO))
 		{
 			getElongatio(aCells, res);
 		}
-		if (aMeasurementChoice[12])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.FLATNESS))
 		{
 			getFlatness(aCells, res);
 		}
-		if (aMeasurementChoice[13])
+		if (Measurement_Selector.getMeasurementPreference(SegmentMeasurements.SPARENESS))
 		{
 			getSpareness(aCells, res);
 		}
 
 		labeldImageScaled.changes = false;
 		labeldImageScaled.close();
+
+		IJ.log("Ended MCIB 3D measurements");
 	}
 }

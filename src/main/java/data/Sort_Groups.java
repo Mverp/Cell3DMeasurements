@@ -1,5 +1,6 @@
 package data;
 
+import java.io.Serializable;
 import java.util.Comparator;
 
 /**
@@ -8,8 +9,11 @@ import java.util.Comparator;
  * @author Merijn van Erp, Esther Markus
  *
  */
-public class Sort_Groups implements Comparator<Cell3D_Group>
+public class Sort_Groups implements Comparator<Cell3D_Group>, Serializable
 {
+	private static final long serialVersionUID = 4444L;
+
+
 	/**
 	 * Compare two groups of cell groups based on group size.
 	 *

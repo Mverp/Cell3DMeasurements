@@ -1,6 +1,7 @@
 package data;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import ij.IJ;
@@ -13,20 +14,23 @@ import ij.IJ;
 public class Cell3D_Group
 {
 	// The migration mode possibilities
-	public static final String UNKNOWN = "UNKNOWN", SINGLE = "SINGLE_CELL", DUAL = "DUAL_CLUSTER", MULTI = "MULTI_CLUSTER", NONE = "NONE";
+	public static final String CORE = "CORE", SINGLE = "SINGLE_CELL", DUAL = "DUAL_CLUSTER", MULTI = "MULTI_CLUSTER", NONE = "NONE";
 
 	private final ArrayList<Cell3D> members = new ArrayList<>();
+	// Map with the mean measurements
+	private final HashMap<String, Double> meanCellMeasurements;
+	private final HashMap<String, Double> meanNucleusMeasurements;
 
 	// The migration modes based on automatic cells and manual markers
-	private String migrationMode = UNKNOWN;
+	private String migrationMode = NONE;
 	private String manualMigrationMode = null;
 
 	// The list of different cells by marker migration mode
-	private final ArrayList<Integer> unknown = new ArrayList<>();
+	private final ArrayList<Integer> core = new ArrayList<>();
 	private final ArrayList<Integer> multiCell = new ArrayList<>();
 	private final ArrayList<Integer> dualCell = new ArrayList<>();
-	private final ArrayList<Integer> singleCells = new ArrayList<>();
-	private final ArrayList<Integer> noneCell = new ArrayList<>();
+	private final ArrayList<Integer> singleCell = new ArrayList<>();
+	private final ArrayList<Integer> noMigrationModeCell = new ArrayList<>();
 
 	// Store for centre calculations
 	private double meanX = 0;
@@ -38,7 +42,7 @@ public class Cell3D_Group
 	private double nucleusSelected = 0;
 	private int nucleusNOTSelected = 0;
 	private int nucleusExcludedBorder = 0;
-	private int nucleiToSmall = 0;
+	private int nucleusTooSmall = 0;
 	private int nucleusExludedBorderAndSize = 0;
 	private int excludedWasCorrectSegmented = 0;
 	private int excludedWasOverSegmented = 0;
@@ -57,6 +61,7 @@ public class Cell3D_Group
 	private int singleCellWithWrongMigrationMode = 0;
 	private int singleCellWithCorrectMigrationMode = 0;
 	private int coreCellWithoutMigrationMode = 0;
+	private int coreCellDetectedAsCore = 0;
 	private int coreCellWithMigrationMode = 0;
 	private int dualCellWithCorrectMigrationMode = 0;
 	private int dualCellWithoutMigrationMode = 0;
@@ -71,42 +76,21 @@ public class Cell3D_Group
 	private double totalVolumeCell = 0;
 
 	// Mean of the cell measurements
-	private double meanGrayValue = 0;
-	private double meanSTDV = 0;
-	private double meanSkewness = 0;
-	private double meanKurtosis = 0;
 	private double meanVolume = 0;
 	private double meanNumberOfVoxels = 0;
-	private double meanSurfaceArea = 0;
-	private double meanSphericities = 0;
-	private double[] meanEllipsoid = null;
-	private double[] meanElongation = null;
-	private double[] meanInscribedSphere = null;
 
-	private double meanGray3D = 0;
-	private double meanSTDV3D = 0;
-
-	private double meanVolumePixels;
-	private double meanVolumeUnits;
-	private double meanAreaPixels;
-	private double meanAreaUnits;
-
-	private double meanCompactness;
-	private double meanSphericity;
-	private double meanElongatio;
-	private double meanFlatness;
-	private double meanSpareness;
+	// Additional channels
+	private ArrayList<Double> meanExtraChannels = null;
+	private ArrayList<Double> backgroundExtraChannels = null;
 
 
 	/**
-	 * Create a Cell3D_Group with at least one member.
-	 *
-	 * @param aStartMember
-	 *            The first Cell3D for this group
+	 * Create an empty Cell3D_Group.
 	 */
-	public Cell3D_Group(final Cell3D aStartMember)
+	public Cell3D_Group()
 	{
-		this.members.add(aStartMember);
+		this.meanCellMeasurements = new HashMap<>();
+		this.meanNucleusMeasurements = new HashMap<>();
 	}
 
 
@@ -119,6 +103,8 @@ public class Cell3D_Group
 	public Cell3D_Group(final List<Cell3D> aStartMembers)
 	{
 		this.members.addAll(aStartMembers);
+		this.meanCellMeasurements = new HashMap<>();
+		this.meanNucleusMeasurements = new HashMap<>();
 	}
 
 
@@ -131,81 +117,88 @@ public class Cell3D_Group
 		final String migrationModeGroup = getMigrationmode();
 
 		// Now check the manual migration mode of all member Cell3Ds
-		for (int i = 0; i < this.members.size(); i++)
+		for (final Cell3D cell : this.members)
 		{
-			final String migrationModeIndividual = this.members.get(i).getMarkerMigrationMode();
-			if (!migrationModeGroup.equals(migrationModeIndividual))
+			final String markerMigModeCell = cell.getMarkerMigrationMode();
+			if (!migrationModeGroup.equals(markerMigModeCell))
 			{
-				// We have a disagreement, determine which specific type and keep count of it.
-				if (migrationModeGroup.equals(SINGLE))
+				// We have a disagreement, determine which specific type of migration resulted in an error and keep count of it.
+				if (migrationModeGroup.equals(NONE))
 				{
-					// This should not have been a single cell
-					this.singleCellFalsePositive = this.singleCellFalsePositive + 1;
-				}
-				else if (migrationModeGroup.equals(UNKNOWN) || migrationModeGroup.equals("NONE"))
-				{
-					// Note: UNKNOWN is mostly considered the spheroid itself, so no migration, while NONE stand in for 'no migration mode set'.
-					this.nucleusWithoutMigrationMode = this.nucleusWithoutMigrationMode + 1;
+					// No migration mode has been assigned to the group while we asked for it.
+					this.nucleusWithoutMigrationMode++;
 
 					// Now determine what should have been
-					if (migrationModeIndividual.equals(SINGLE))
+					if (markerMigModeCell.equals(SINGLE))
 					{
-						this.singleCellWithoutMigrationMode = this.singleCellWithoutMigrationMode + 1;
+						this.singleCellWithoutMigrationMode++;
 					}
-					else if (migrationModeIndividual.equals(DUAL))
+					else if (markerMigModeCell.equals(CORE))
 					{
-						this.dualCellWithoutMigrationMode = this.dualCellWithoutMigrationMode + 1;
+						this.coreCellWithoutMigrationMode++;
 					}
-					else if (migrationModeIndividual.equals(MULTI))
+					else if (markerMigModeCell.equals(DUAL))
 					{
-						this.multiCellWithoutMigrationMode = this.multiCellWithoutMigrationMode + 1;
+						this.dualCellWithoutMigrationMode++;
+					}
+					else if (markerMigModeCell.equals(MULTI))
+					{
+						this.multiCellWithoutMigrationMode++;
 					}
 				}
 				else
 				{
-					// Not single or no migration (the two major cases). Differentiation of the false positives is not needed.
-					this.nucleusWithWrongMigrationMode = this.nucleusWithWrongMigrationMode + 1;
+					if (migrationModeGroup.equals(SINGLE))
+					{
+						// This should not have been a single cell
+						this.singleCellFalsePositive++;
+					}
+					else
+					{
+						// Not single or no migration (the two major error cases). Differentiation of the false positives is not needed.
+						this.nucleusWithWrongMigrationMode++;
+					}
 
-					// The differentiation of the 'should have beens' is interesting however.
-					if (migrationModeIndividual.equals(SINGLE))
+					// What should it have been though?.
+					if (markerMigModeCell.equals(SINGLE))
 					{
-						this.singleCellWithWrongMigrationMode = this.singleCellWithWrongMigrationMode + 1;
+						this.singleCellWithWrongMigrationMode++;
 					}
-					else if (migrationModeIndividual.equals(DUAL))
+					else if (markerMigModeCell.equals(DUAL))
 					{
-						this.dualCellWithWrongMigrationMode = this.dualCellWithWrongMigrationMode + 1;
+						this.dualCellWithWrongMigrationMode++;
 					}
-					else if (migrationModeIndividual.equals(MULTI))
+					else if (markerMigModeCell.equals(MULTI))
 					{
-						this.multiCellWithWrongMigrationMode = this.multiCellWithWrongMigrationMode + 1;
+						this.multiCellWithWrongMigrationMode++;
 					}
-					else if (migrationModeIndividual.equals(UNKNOWN))
+					else if (markerMigModeCell.equals(CORE))
 					{
-						this.coreCellWithMigrationMode = this.coreCellWithMigrationMode + 1;
+						this.coreCellWithMigrationMode++;
 					}
 				}
 			}
 			else
 			{
 				// Yay, correct migration analysis
-				this.nucleusWithCorrectMigrationMode = this.nucleusWithCorrectMigrationMode + 1;
+				this.nucleusWithCorrectMigrationMode++;
 
-				// Now count what went well
-				if (migrationModeIndividual.equals(SINGLE))
+				// Now count what type of migration was detected successfully
+				if (markerMigModeCell.equals(SINGLE))
 				{
-					this.singleCellWithCorrectMigrationMode = this.singleCellWithCorrectMigrationMode + 1;
+					this.singleCellWithCorrectMigrationMode++;
 				}
-				else if (migrationModeIndividual.equals(UNKNOWN))
+				else if (markerMigModeCell.equals(CORE))
 				{
-					this.coreCellWithoutMigrationMode = this.coreCellWithoutMigrationMode + 1;
+					this.coreCellDetectedAsCore++;
 				}
-				else if (migrationModeIndividual.equals(DUAL))
+				else if (markerMigModeCell.equals(DUAL))
 				{
-					this.dualCellWithCorrectMigrationMode = this.dualCellWithCorrectMigrationMode + 1;
+					this.dualCellWithCorrectMigrationMode++;
 				}
-				else if (migrationModeIndividual.equals(MULTI))
+				else if (markerMigModeCell.equals(MULTI))
 				{
-					this.multiCellWithCorrectMigrationMode = this.multiCellWithCorrectMigrationMode + 1;
+					this.multiCellWithCorrectMigrationMode++;
 				}
 			}
 		}
@@ -247,7 +240,7 @@ public class Cell3D_Group
 				}
 				else if (nucleus.isTooSmall())
 				{
-					this.nucleiToSmall = this.nucleiToSmall + 1;
+					this.nucleusTooSmall = this.nucleusTooSmall + 1;
 				}
 
 				// Count correct segmentation
@@ -308,6 +301,33 @@ public class Cell3D_Group
 	}
 
 
+	public List<Double> getBackgrounExtraChannels()
+	{
+		if (this.backgroundExtraChannels == null && this.members != null)
+		{
+			final List<SegmentMeasurements> segmentMeasurements = this.members.get(0).getSignalMeasurements();
+			this.backgroundExtraChannels = new ArrayList<>();
+			for (int i = 0; i < segmentMeasurements.size(); i++)
+			{
+				this.backgroundExtraChannels.add(segmentMeasurements.get(i).getMeasurement(SegmentMeasurements.BACKGROUND_INTENSITY));
+			}
+		}
+
+		return this.backgroundExtraChannels;
+	}
+
+
+	public String getCellLabelsWithoutMigrationMode()
+	{
+		final StringBuilder names = new StringBuilder("");
+		for (int i = 0; i < this.noMigrationModeCell.size(); i++)
+		{
+			names.append(" " + this.noMigrationModeCell.get(i));
+		}
+		return names.toString();
+	}
+
+
 	/**
 	 * Get the point that has as coordinates the mean of all x-, y-, and z-coordinates.
 	 *
@@ -330,6 +350,16 @@ public class Cell3D_Group
 	}
 
 
+	public int getCoreCellDetectedAsCore()
+	{
+		if (!this.countNucleusMigrationMode)
+		{
+			countMigrationModeAccuracy();
+		}
+		return this.coreCellDetectedAsCore;
+	}
+
+
 	/**
 	 * Get, as a String, the labels of all the cells marked as part of the core or at least the largest cluster (tagged as 'UNKNOWN').
 	 *
@@ -337,19 +367,19 @@ public class Cell3D_Group
 	 */
 	public String getCoreCellLabels()
 	{
-		String names = "";
-		for (int i = 0; i < this.unknown.size(); i++)
+		final StringBuilder names = new StringBuilder("");
+		for (int i = 0; i < this.core.size(); i++)
 		{
-			names = names + " " + this.unknown.get(i);
+			names.append(" " + this.core.get(i));
 		}
-		return names;
+		return names.toString();
 	}
 
 
 	/**
-	 * Get the number of cells that should belong to the core of the spheroid but that actually got assigned a migration label.
+	 * Get the number of cells that should belong to the core of the spheroid and that were successfully detected as such.
 	 *
-	 * @return The number of mislabelled core cells.
+	 * @return The number of correctly detected core cells.
 	 */
 	public int getCoreCellWithMigrationMode()
 	{
@@ -362,9 +392,9 @@ public class Cell3D_Group
 
 
 	/**
-	 * Get the number of shperoid-core cells that correctly got assigned no migration label.
+	 * Get the number of spheroid-core cells that got no migration label assigned.
 	 *
-	 * @return The number of correctly labelled core cells.
+	 * @return The number of unlabelled core cells.
 	 */
 	public int getCoreCellWithoutMigrationMode()
 	{
@@ -383,12 +413,12 @@ public class Cell3D_Group
 	 */
 	public String getDualCellLabels()
 	{
-		String names = "";
+		final StringBuilder names = new StringBuilder("");
 		for (int i = 0; i < this.dualCell.size(); i++)
 		{
-			names = names + " " + this.dualCell.get(i);
+			names.append(" " + this.dualCell.get(i));
 		}
-		return names;
+		return names.toString();
 	}
 
 
@@ -438,8 +468,8 @@ public class Cell3D_Group
 				final String migrationMode = cell.getMarkerMigrationMode();
 				switch (migrationMode)
 				{
-				case UNKNOWN:
-					this.unknown.add(nucleus.getLabel());
+				case CORE:
+					this.core.add(nucleus.getLabel());
 					break;
 				case MULTI:
 					this.multiCell.add(nucleus.getLabel());
@@ -448,10 +478,10 @@ public class Cell3D_Group
 					this.dualCell.add(nucleus.getLabel());
 					break;
 				case SINGLE:
-					this.singleCells.add(nucleus.getLabel());
+					this.singleCell.add(nucleus.getLabel());
 					break;
 				case NONE:
-					this.noneCell.add(nucleus.getLabel());
+					this.noMigrationModeCell.add(nucleus.getLabel());
 					break;
 				default:
 					// Nothing needed, though this should not occur
@@ -461,7 +491,7 @@ public class Cell3D_Group
 				{
 					this.manualMigrationMode = migrationMode;
 				}
-				else if (this.manualMigrationMode != migrationMode)
+				else if (!this.manualMigrationMode.equals(migrationMode))
 				{
 					dualIdentity = true;
 				}
@@ -470,185 +500,88 @@ public class Cell3D_Group
 			if (dualIdentity == true)
 			{
 				this.manualMigrationMode = "MULTIPLE_IDENTITIES";
-				IJ.log("MULTIPLE_IDENTITIES " + this.singleCells.size() + " " + this.dualCell.size() + " " + this.multiCell.size() + " " + this.unknown.size());
+				IJ.log("MULTIPLE_IDENTITIES " + this.singleCell.size() + " " + this.dualCell.size() + " " + this.multiCell.size() + " " + this.core.size());
 			}
 		}
 		return this.manualMigrationMode;
 	}
 
 
-	public double getMeanAreaPixels()
+	public double getMeanCellMeasure(final String aMeasureName)
 	{
-		if (this.meanAreaPixels == 0)
+		Double resultMeasure = this.meanCellMeasurements.get(aMeasureName);
+
+		if (resultMeasure == null)
 		{
+			double measure = 0;
 			for (final Cell3D cell : this.members)
 			{
-				this.meanAreaPixels = this.meanAreaPixels + cell.getNucleus().getMeasurements().getAreaPixels();
+				measure = measure + cell.getMeasurements().getMeasurement(aMeasureName);
 			}
-			this.meanAreaPixels = this.meanAreaPixels / this.members.size();
+			resultMeasure = measure / this.members.size();
 		}
-		return this.meanAreaPixels;
+		this.meanCellMeasurements.put(aMeasureName, resultMeasure);
+
+		return resultMeasure;
 	}
 
 
-	public double getMeanAreaUnits()
+	public List<Double> getMeanExtraChannels()
 	{
-		if (this.meanAreaUnits == 0)
+		if (this.meanExtraChannels == null && this.members != null)
 		{
-			for (final Cell3D cell : this.members)
+			List<SegmentMeasurements> segmentMeasurements = this.members.get(0).getSignalMeasurements();
+			if (segmentMeasurements != null)
 			{
-				this.meanAreaUnits = this.meanAreaUnits + cell.getNucleus().getMeasurements().getAreaUnit();
-			}
-			this.meanAreaUnits = this.meanAreaUnits / this.members.size();
-		}
-		return this.meanAreaUnits;
-	}
-
-
-	public double getMeanCompactness()
-	{
-		if (this.meanCompactness == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanCompactness = this.meanCompactness + cell.getNucleus().getMeasurements().getCompactness();
-			}
-			this.meanCompactness = this.meanCompactness / this.members.size();
-		}
-		return this.meanCompactness;
-	}
-
-
-	public double[] getMeanEllipsoid()
-	{
-		if (this.meanEllipsoid == null)
-		{
-			this.meanEllipsoid = new double[9];
-			for (final Cell3D cell : this.members)
-			{
-				for (int j = 0; j < 9; j++)
+				this.meanExtraChannels = new ArrayList<>();
+				for (int i = 0; i < segmentMeasurements.size(); i++)
 				{
-					this.meanEllipsoid[j] = this.meanEllipsoid[j] + cell.getNucleus().getMeasurements().getEllipsoid()[j];
+					this.meanExtraChannels.add(0.0);
+				}
+				for (final Cell3D cell : this.members)
+				{
+					segmentMeasurements = cell.getSignalMeasurements();
+					for (int i = 0; i < segmentMeasurements.size(); i++)
+					{
+						this.meanExtraChannels.set(i, this.meanExtraChannels.get(i) + segmentMeasurements.get(i).getMeasurement(SegmentMeasurements.MEAN_INTENSITY));
+					}
+				}
+
+				for (int i = 0; i < segmentMeasurements.size(); i++)
+				{
+					this.meanExtraChannels.set(i, this.meanExtraChannels.get(i) / this.members.size());
 				}
 			}
-			for (int j = 0; j < 9; j++)
-			{
-				this.meanEllipsoid[j] = this.meanEllipsoid[j] / this.members.size();
-			}
 		}
-		return this.meanEllipsoid;
+
+		return this.meanExtraChannels;
 	}
 
 
-	public double getMeanElongatio()
+	public Double getMeanNucleusMeasure(final String aMeasureName)
 	{
-		if (this.meanElongatio == 0)
+		Double resultMeasure = this.meanNucleusMeasurements.get(aMeasureName);
+
+		if (resultMeasure == null)
 		{
+			double measure = 0;
 			for (final Cell3D cell : this.members)
 			{
-				this.meanElongatio = this.meanElongatio + cell.getNucleus().getMeasurements().getElongatio();
-			}
-			this.meanElongatio = this.meanElongatio / this.members.size();
-		}
-		return this.meanElongatio;
-	}
-
-
-	public double[] getMeanElongation()
-	{
-		if (this.meanElongation == null)
-		{
-			this.meanElongation = new double[3];
-			for (final Cell3D cell : this.members)
-			{
-				for (int j = 0; j < 3; j++)
+				final Double nucMeasure = cell.getNucleus().getMeasurements().getMeasurement(aMeasureName);
+				if (nucMeasure != null)
 				{
-					this.meanElongation[j] = this.meanElongation[j] + cell.getNucleus().getMeasurements().getElongations()[j];
+					measure = measure + nucMeasure;
+				}
+				else
+				{
+					return null;
 				}
 			}
-			for (int j = 0; j < 3; j++)
-			{
-				this.meanElongation[j] = this.meanElongation[j] / this.members.size();
-			}
+			resultMeasure = measure / this.members.size();
 		}
-		return this.meanElongation;
-	}
+		this.meanNucleusMeasurements.put(aMeasureName, resultMeasure);
 
-
-	public double getMeanFlatness()
-	{
-		if (this.meanFlatness == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanFlatness = this.meanFlatness + cell.getNucleus().getMeasurements().getFlatness();
-			}
-			this.meanFlatness = this.meanFlatness / this.members.size();
-		}
-		return this.meanFlatness;
-	}
-
-
-	public double getMeanGray3D()
-	{
-		if (this.meanGray3D == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanGray3D = this.meanGray3D + cell.getNucleus().getMeasurements().getMeanIntensity3D();
-			}
-			this.meanGray3D = this.meanGray3D / this.members.size();
-		}
-		return this.meanGray3D;
-	}
-
-
-	public double getMeanGrayValue()
-	{
-		if (this.meanGrayValue == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanGrayValue = this.meanGrayValue + cell.getNucleus().getMeasurements().getMeanIntensity();
-			}
-			this.meanGrayValue = this.meanGrayValue / this.members.size();
-		}
-		return this.meanGrayValue;
-	}
-
-
-	public double[] getMeanInscribedSphere()
-	{
-		if (this.meanInscribedSphere == null)
-		{
-			this.meanInscribedSphere = new double[4];
-			for (final Cell3D cell : this.members)
-			{
-				for (int j = 0; j < 4; j++)
-				{
-					this.meanInscribedSphere[j] = this.meanInscribedSphere[j] + cell.getNucleus().getMeasurements().getInscribedSphere()[j];
-				}
-			}
-			for (int j = 0; j < 4; j++)
-			{
-				this.meanInscribedSphere[j] = this.meanInscribedSphere[j] / this.members.size();
-			}
-		}
-		return this.meanInscribedSphere;
-	}
-
-
-	public double getMeanKurtosis()
-	{
-		if (this.meanKurtosis == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanKurtosis = this.meanKurtosis + cell.getNucleus().getMeasurements().getKurtosis();
-			}
-			this.meanKurtosis = this.meanKurtosis / this.members.size();
-		}
-		return this.meanKurtosis;
+		return resultMeasure;
 	}
 
 
@@ -666,104 +599,6 @@ public class Cell3D_Group
 	}
 
 
-	public double getMeanSkewness()
-	{
-		if (this.meanSkewness == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanSkewness = this.meanSkewness + cell.getNucleus().getMeasurements().getSkewness();
-			}
-			this.meanSkewness = this.meanSkewness / this.members.size();
-		}
-		return this.meanSkewness;
-	}
-
-
-	public double getMeanSpareness()
-	{
-		if (this.meanSpareness == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanSpareness = this.meanSpareness + cell.getNucleus().getMeasurements().getSpareness();
-			}
-			this.meanSpareness = this.meanSpareness / this.members.size();
-		}
-		return this.meanSpareness;
-	}
-
-
-	public double getMeanSphericities()
-	{
-		if (this.meanSphericities == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanSphericities = this.meanSphericities + cell.getNucleus().getMeasurements().getSphericities();
-			}
-			this.meanSphericities = this.meanSphericities / this.members.size();
-		}
-		return this.meanSphericities;
-	}
-
-
-	public double getMeanSphericity()
-	{
-		if (this.meanSphericity == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanSphericity = this.meanSphericity + cell.getNucleus().getMeasurements().getSphericity();
-			}
-			this.meanSphericity = this.meanSphericity / this.members.size();
-		}
-		return this.meanSphericity;
-	}
-
-
-	public double getMeanSTDV()
-	{
-		if (this.meanSTDV == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanSTDV = this.meanSTDV + cell.getNucleus().getMeasurements().getStandardDeviation();
-			}
-			this.meanSTDV = this.meanSTDV / this.members.size();
-		}
-		return this.meanSTDV;
-	}
-
-
-	public double getMeanSTDV3D()
-	{
-		if (this.meanSTDV3D == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanSTDV3D = this.meanSTDV3D + cell.getNucleus().getMeasurements().getMeanIntensity3D();
-			}
-			this.meanSTDV3D = this.meanSTDV3D / this.members.size();
-		}
-		return this.meanSTDV3D;
-	}
-
-
-	public double getMeanSurfaceArea()
-	{
-		if (this.meanSurfaceArea == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanSurfaceArea = this.meanSurfaceArea + cell.getNucleus().getMeasurements().getSurfaceArea();
-			}
-			this.meanSurfaceArea = this.meanSurfaceArea / this.members.size();
-		}
-		return this.meanSurfaceArea;
-	}
-
-
 	public double getMeanVolume()
 	{
 		if (this.meanVolume == 0)
@@ -775,34 +610,6 @@ public class Cell3D_Group
 			this.meanVolume = this.meanVolume / this.members.size();
 		}
 		return this.meanVolume;
-	}
-
-
-	public double getMeanVolumePixels()
-	{
-		if (this.meanVolumePixels == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanVolumePixels = this.meanVolumePixels + cell.getNucleus().getMeasurements().getVolumePixels();
-			}
-			this.meanVolumePixels = this.meanVolumePixels / this.members.size();
-		}
-		return this.meanVolumePixels;
-	}
-
-
-	public double getMeanVolumeUnits()
-	{
-		if (this.meanVolumeUnits == 0)
-		{
-			for (final Cell3D cell : this.members)
-			{
-				this.meanVolumeUnits = this.meanVolumeUnits + cell.getNucleus().getMeasurements().getVolumeUnit();
-			}
-			this.meanVolumeUnits = this.meanVolumeUnits / this.members.size();
-		}
-		return this.meanVolumeUnits;
 	}
 
 
@@ -820,16 +627,15 @@ public class Cell3D_Group
 
 	public String getMemberNames()
 	{
-		String names = "";
+		final StringBuilder names = new StringBuilder("");
 		for (final Cell3D cell : this.members)
 		{
 			if (cell.getNucleus() != null)
 			{
-				names = names + cell.getNucleus().getLabel() + " ";
+				names.append(cell.getNucleus().getLabel() + " ");
 			}
-
 		}
-		return names;
+		return names.toString();
 	}
 
 
@@ -857,18 +663,19 @@ public class Cell3D_Group
 	 */
 	public String getMultiCellLabels()
 	{
-		String labels = "";
+		final StringBuilder labels = new StringBuilder("");
 		for (final int cellLabel : this.multiCell)
 		{
-			labels = labels + cellLabel + " ";
+			labels.append(cellLabel + " ");
 		}
 
-		if (!labels.equals(""))
+		String result = labels.toString();
+		if (!result.equals(""))
 		{
 			// Remove the last " "
-			labels = labels.substring(0, labels.length() - 1);
+			result = result.substring(0, labels.length() - 1);
 		}
-		return labels;
+		return result;
 	}
 
 
@@ -907,17 +714,6 @@ public class Cell3D_Group
 		}
 		// IJ.log("multiCellWithWrongMigrationMode" + multiCellWithWrongMigrationMode);
 		return this.multiCellWithWrongMigrationMode;
-	}
-
-
-	public String getNoneCellNames()
-	{
-		String names = "";
-		for (int i = 0; i < this.noneCell.size(); i++)
-		{
-			names = names + " " + this.noneCell.get(i);
-		}
-		return names;
 	}
 
 
@@ -998,7 +794,7 @@ public class Cell3D_Group
 		{
 			countNucleusMarkers();
 		}
-		return this.nucleiToSmall;
+		return this.nucleusTooSmall;
 	}
 
 
@@ -1050,17 +846,6 @@ public class Cell3D_Group
 			countMigrationModeAccuracy();
 		}
 		return this.nucleusWithWrongMigrationMode;
-	}
-
-
-	public double getPercentageNucleusCorrectSegmented()
-	{
-		if (!this.countNucleusMarkers)
-		{
-			countNucleusMarkers();
-		}
-		final double percentage = (this.nucleusWithSeedAndMarker / this.nucleusSelected) * 100;
-		return percentage;
 	}
 
 
@@ -1155,6 +940,22 @@ public class Cell3D_Group
 	}
 
 
+	/**
+	 * Gets the precision value of the segmentation; i.e. # true positives / # all positives.
+	 *
+	 * @return The precision of the segmentation as a percentage.
+	 */
+	public double getSegmentationPrecision()
+	{
+		if (!this.countNucleusMarkers)
+		{
+			countNucleusMarkers();
+		}
+		final double percentage = (this.nucleusWithSeedAndMarker / this.nucleusSelected) * 100;
+		return percentage;
+	}
+
+
 	public int getSingleCellFalsePositive()
 	{
 		if (!this.countNucleusMigrationMode)
@@ -1172,12 +973,12 @@ public class Cell3D_Group
 	 */
 	public String getSingleCellLabels()
 	{
-		String names = "";
-		for (int i = 0; i < this.singleCells.size(); i++)
+		final StringBuilder names = new StringBuilder("");
+		for (int i = 0; i < this.singleCell.size(); i++)
 		{
-			names = names + " " + this.singleCells.get(i);
+			names.append(" " + this.singleCell.get(i));
 		}
-		return names;
+		return names.toString();
 	}
 
 
