@@ -13,13 +13,21 @@
 	</parent>
 
 	<groupId>sc.fiji</groupId>
-	<artifactId>Nulcei_Segmentation_3D</artifactId>
-	<version>0.1.0</version>
+	<artifactId>Cell_Migration_Analyser_3D</artifactId>
+	<version>0.9</version>
 
-	<name>plugins/Nulcei_Segmentation_3D.jar</name>
+	<name>plugins/Cell_Migration_Analyser_3D.jar</name>
 	<description>Segments a DAPI/actin image in 3D.</description>
 
 	<developers>
+		<developer>
+			<id>mverp</id>
+			<name>Merijn van Erp</name>
+			<roles>
+				<role>architect</role>
+				<role>developer</role>
+			</roles>
+		</developer>
 		<developer>
 			<id>emarkus</id>
 			<name>Esther</name>
