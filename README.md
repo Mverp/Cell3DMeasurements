@@ -6,7 +6,7 @@ It uses three plugins insequence to identify, segment, and measure nuclei and co
 3. The **Feature Extraction** plugin uses the segments produced by the previous plugin to measure all types of features on the nuclei and  the cell (with or without the nucleus). This constitutes values dependent on the size and shape of the segments, as well as the intensity of any of the channels of the image. Furthermore, the plugin will do a *migration analysis* on request (given an actin channel) which will determine the mode of cell migration (single vs collective) of any cell. There is also an approximation of the distance migrated per cell.
 
 
-A step by step protocol for using these plugins is described in the [manual](https://github.com/Mverp/CellMigrationAnalysisMannual).
+A step by step protocol for using these plugins is described in the [manual](https://github.com/Mverp/CellMigrationAnalysisManual).
 
 
 This project uses the following dependencies:
