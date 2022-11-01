@@ -94,12 +94,11 @@ public class Feature_Extractor_3D implements PlugIn
 
 
 	/**
-	 * Count the markers which are located: 0= in a nucleus, 1= multiple in a nucleus, 2= outside all the nuclei, 3 = in an excluded (border or too small) nucleus, 4 = in a disqualified nucleus. The counts are returned as an int array.
+	 * Count the markers which are located: 0= in a nucleus, 1= multiple in a nucleus, 2= outside all the nuclei, 3 = in an excluded (border or too small) nucleus, 4 = in a disqualified nucleus. The
+	 * counts are returned as an int array.
 	 *
-	 * @param aListOfMarkers
-	 *            The List of Labeled_Coordinates to be counted (labelled with the migration mode)
-	 * @param aCells
-	 *            The list of cells to which the markers may belong
+	 * @param aListOfMarkers The List of Labeled_Coordinates to be counted (labelled with the migration mode)
+	 * @param aCells         The list of cells to which the markers may belong
 	 * @return An int[5] array containing the counts (see above for indexes).
 	 */
 	private int[] countMarkersAndAddToNucleus(final List<Labeled_Coordinate> aListOfMarkers, final Cell3D[] aCells)
@@ -159,10 +158,10 @@ public class Feature_Extractor_3D implements PlugIn
 
 
 	/**
-	 * This method prepares two images for displaying the segmentation results. The input image is converted to a RGB image and a second blank RGB image (black background) is created with the same dimensions as the input image.
+	 * This method prepares two images for displaying the segmentation results. The input image is converted to a RGB image and a second blank RGB image (black background) is created with the same
+	 * dimensions as the input image.
 	 *
-	 * @param aImage
-	 *            The input image. This method will convert this image to an RGB image.
+	 * @param aImage The input image. This method will convert this image to an RGB image.
 	 *
 	 * @return A blank RGB image of the same dimensions as the input image.
 	 */
@@ -189,14 +188,12 @@ public class Feature_Extractor_3D implements PlugIn
 	/**
 	 * Add any non-standard functionality that will be done after the standard measurements and results have been handled.
 	 *
-	 * @param aCells
-	 *            The list of detected cells
-	 * @param aSpheroid
-	 *            The spheroid information, if any
+	 * @param aCells    The list of detected cells
+	 * @param aSpheroid The spheroid information, if any
 	 */
 	private void doAfterStandard(final Cell3D[] aCells, final Spheroid aSpheroid, final ImagePlus aResultsImage)
 	{
-		if (aSpheroid != null)
+		if (aSpheroid != null && this.actinImage != null)
 		{
 			// if (this.alternateChannels != null && this.alternateChannels.size() == 4)
 			// {
@@ -216,8 +213,7 @@ public class Feature_Extractor_3D implements PlugIn
 	/**
 	 * Get the title of an image and remove its file extension part (if any).
 	 *
-	 * @param aImage
-	 *            The image for the shorter title
+	 * @param aImage The image for the shorter title
 	 * @return The shortened image title
 	 */
 	private String getTitleWithoutExtension(final ImagePlus aImage)
@@ -233,13 +229,11 @@ public class Feature_Extractor_3D implements PlugIn
 
 
 	/**
-	 * From a list of marker-file names, select the file which matches the given image title and read the markers from the file. This produces two lists: one containing the marker Coordinates and one containing the Coordinates and all other info
-	 * contained in the marker file.
+	 * From a list of marker-file names, select the file which matches the given image title and read the markers from the file. This produces two lists: one containing the marker Coordinates and one
+	 * containing the Coordinates and all other info contained in the marker file.
 	 *
-	 * @param aMarkerFile
-	 *            The list of possible marker-file names
-	 * @param aReadCoordinates
-	 *            The list of coordinates that will be extended with the marker coordinates
+	 * @param aMarkerFile      The list of possible marker-file names
+	 * @param aReadCoordinates The list of coordinates that will be extended with the marker coordinates
 	 *
 	 * @return A list of Labeled_Coordinate containing all the marker coordinates of the marker file and their additional values such as the label and detection value.
 	 */
@@ -514,14 +508,10 @@ public class Feature_Extractor_3D implements PlugIn
 	/**
 	 * Save the two output images in the given directory.
 	 *
-	 * @param aOutlinesImage
-	 *            The image of nucleus outlines and seeds
-	 * @param aNucleusImage
-	 *            The image of nucleus segmentation coloured to depict its correctness
-	 * @param aTitle
-	 *            The main title for both images
-	 * @param aDirectory
-	 *            The directory in which to save the images
+	 * @param aOutlinesImage The image of nucleus outlines and seeds
+	 * @param aNucleusImage  The image of nucleus segmentation coloured to depict its correctness
+	 * @param aTitle         The main title for both images
+	 * @param aDirectory     The directory in which to save the images
 	 */
 	private void saveOutputImage(final ImagePlus aOutlinesImage, final ImagePlus aNucleusImage, final String aTitle, final File aDirectory)
 	{
@@ -550,11 +540,11 @@ public class Feature_Extractor_3D implements PlugIn
 
 
 	/**
-	 * Create a dialog to have the user define which image channels are relevant to the feature extraction. Two of the standard channels are the nucleus (DAPI) channel and the actin (mostly phalloidin) channel. Any additional channels can be defined
-	 * as well including the type of measurement that should be performed on them. The measurement types consist of averages of intensity in the nucleus, a specified volume around the nucleus seed, the full cell segment or the cell inus the nucleus.
+	 * Create a dialog to have the user define which image channels are relevant to the feature extraction. Two of the standard channels are the nucleus (DAPI) channel and the actin (mostly
+	 * phalloidin) channel. Any additional channels can be defined as well including the type of measurement that should be performed on them. The measurement types consist of averages of intensity in
+	 * the nucleus, a specified volume around the nucleus seed, the full cell segment or the cell inus the nucleus.
 	 *
-	 * @param aImage
-	 *            The ImagePlus on which the feature extraction will take place. This determines the number of channels to be chosen.
+	 * @param aImage The ImagePlus on which the feature extraction will take place. This determines the number of channels to be chosen.
 	 *
 	 * @return The List of TypedChannels (channel plus measurement type String) that have been selected; this includes the standard channels.
 	 */
@@ -581,10 +571,17 @@ public class Feature_Extractor_3D implements PlugIn
 		dialog.addChoice("Actin channel", channelchooser, actinChannelPref);
 		final Component message = dialog.getMessage();
 		final Font underlineFont = message.getFont();
-		final Map<TextAttribute, Object> attributes = new HashMap<>(underlineFont.getAttributes());
-		attributes.put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON);
-		attributes.put(TextAttribute.WEIGHT, TextAttribute.WEIGHT_BOLD);
-		dialog.addMessage("Additional channels:", underlineFont.deriveFont(attributes));
+		if (underlineFont != null) // Can be null on Apple computers
+		{
+			final Map<TextAttribute, Object> attributes = new HashMap<>(underlineFont.getAttributes());
+			attributes.put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON);
+			attributes.put(TextAttribute.WEIGHT, TextAttribute.WEIGHT_BOLD);
+			dialog.addMessage("Additional channels:", underlineFont.deriveFont(attributes));
+		}
+		else
+		{
+			dialog.addMessage("Additional channels:");
+		}
 		for (int i = 0; i < NR_OF_ADDITIONAL_CHANNELS; i++)
 		{
 			dialog.addChoice("Additional channel " + (i + 1), channelchooser, channelPrefs[i]);
@@ -815,11 +812,10 @@ public class Feature_Extractor_3D implements PlugIn
 
 
 	/**
-	 * A Dialog asks the user to select the original image, which can be a 2D, 3D or a hyperstack image. The user can also assign an adjusted version of the original image as input. This adjusted image will then be used as the base for the output
-	 * images.
+	 * A Dialog asks the user to select the original image, which can be a 2D, 3D or a hyperstack image. The user can also assign an adjusted version of the original image as input. This adjusted
+	 * image will then be used as the base for the output images.
 	 *
-	 * @param aNames
-	 *            The list of names from which the user can choose. The first name is taken as default.
+	 * @param aNames The list of names from which the user can choose. The first name is taken as default.
 	 * @return False if the Dialog has been cancelled has been cancelled, true otherwise.
 	 */
 	private boolean selectOriginalImage(final String[] aNames)
@@ -919,10 +915,8 @@ public class Feature_Extractor_3D implements PlugIn
 	/**
 	 * This Dialog asks the user for the input of segmented images. The Dialog can be cancelled.
 	 *
-	 * @param aimages,
-	 *            the list where the images will be located
-	 * @param anames,
-	 *            a array with names of the active images in FIJI @return, if the dialogue was oked
+	 * @param aimages, the list where the images will be located
+	 * @param anames, a array with names of the active images in FIJI @return, if the dialogue was oked
 	 */
 	private boolean selectSegmentedImages(final String[] aNames) // Dialog for the Labeled nucleus images
 	{
@@ -970,12 +964,9 @@ public class Feature_Extractor_3D implements PlugIn
 	/**
 	 * Calculate and set the distance of all cells compared to the spheroid centre and edge.
 	 *
-	 * @param aCells
-	 *            The list of Cell3Ds to process
-	 * @param aCoreCentre
-	 *            The Coordinates of the spheroid centre
-	 * @param aCoreRadius
-	 *            The radius of the spheroid
+	 * @param aCells      The list of Cell3Ds to process
+	 * @param aCoreCentre The Coordinates of the spheroid centre
+	 * @param aCoreRadius The radius of the spheroid
 	 */
 	private void setDistanceToSpheroid(final Cell3D[] aCells, final Spheroid aSpheroid)
 	{
