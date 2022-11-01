@@ -30,8 +30,8 @@ import ij.process.ImageStatistics;
 import utils.Measurer;
 
 /**
- * This is a helper class that provides a list of Cell3D including measurements based on an original image, a DAPI channel image and (optionally) an actin channel image. This is the controlling class that will call any specific measurement
- * implementations if need be.
+ * This is a helper class that provides a list of Cell3D including measurements based on an original image, a DAPI channel image and (optionally) an actin channel image. This is the controlling class
+ * that will call any specific measurement implementations if need be.
  */
 public class CellMeasurer
 {
@@ -49,21 +49,15 @@ public class CellMeasurer
 
 
 	/**
-	 * Check if the value of a voxel is NOT equal to a given label value or zero. This method can be used to determine if a given voxel is part of the current segment (identified with the label given). If not, it will be added to the list of touching
-	 * neighbours.
+	 * Check if the value of a voxel is NOT equal to a given label value or zero. This method can be used to determine if a given voxel is part of the current segment (identified with the label
+	 * given). If not, it will be added to the list of touching neighbours.
 	 *
-	 * @param aXCoordinate
-	 *            The X-coordinate of the voxel
-	 * @param aYCoordinate
-	 *            The Y-coordinate of the voxel
-	 * @param aZCoordinate
-	 *            The Z-coordinate of the voxel
-	 * @param aLabel
-	 *            The current segment label (an Integer) to which to match the voxel value
-	 * @param aImageStack
-	 *            The image stack containing the voxels
-	 * @param aTouchingNeighbourLabelList
-	 *            The list of already found touching neighbour labels
+	 * @param aXCoordinate                The X-coordinate of the voxel
+	 * @param aYCoordinate                The Y-coordinate of the voxel
+	 * @param aZCoordinate                The Z-coordinate of the voxel
+	 * @param aLabel                      The current segment label (an Integer) to which to match the voxel value
+	 * @param aImageStack                 The image stack containing the voxels
+	 * @param aTouchingNeighbourLabelList The list of already found touching neighbour labels
 	 */
 	private static void checkVoxelLabel(final int aXCoordinate, final int aYCoordinate, final int aZCoordinate, final int aLabel, final ImageStack aImageStack,
 			final Set<Integer> aTouchingNeighbourLabelList)
@@ -160,15 +154,12 @@ public class CellMeasurer
 
 
 	/**
-	 * Compute the outline coordinates for each labelled segment. An outline coordinate is a non-zero voxel that is differently labelled compared to any of the directly adjacent voxels. The method returns an Array of Lists of Coordinates, where each
-	 * list contains the outline coordinates of one nucleus. The indices in the result array match those of the 'labels' array.
+	 * Compute the outline coordinates for each labelled segment. An outline coordinate is a non-zero voxel that is differently labelled compared to any of the directly adjacent voxels. The method
+	 * returns an Array of Lists of Coordinates, where each list contains the outline coordinates of one nucleus. The indices in the result array match those of the 'labels' array.
 	 *
-	 * @param aLabelImage
-	 *            The image where each nucleus is drawn completely in its label colours.
-	 * @param aLabels
-	 *            The list of available labels in the label image
-	 * @param aLabelIndices
-	 *            The index numbers for each label, to match the order of the outlines List with that of the labels List
+	 * @param aLabelImage   The image where each nucleus is drawn completely in its label colours.
+	 * @param aLabels       The list of available labels in the label image
+	 * @param aLabelIndices The index numbers for each label, to match the order of the outlines List with that of the labels List
 	 *
 	 * @return An array of lists of Coordinates where each list 'i' contains the outline Coordinates of the label at index 'i' in the labels input List.
 	 */
@@ -266,17 +257,14 @@ public class CellMeasurer
 
 
 	/**
-	 * Compute the 'touching' neighbours of a segment. Another segment is considered touching if it has at least a pixel directly adjacent to or 1 pixel removed from a pixel of the original nucleus. The exact distance required depends of whether
-	 * background 'dams' have been used to distinguish between segment in the image or not. If no dams have been used, direct adjacency is required, while with dams the 1 pixel distance is sufficient to be considered touching.
+	 * Compute the 'touching' neighbours of a segment. Another segment is considered touching if it has at least a pixel directly adjacent to or 1 pixel removed from a pixel of the original nucleus.
+	 * The exact distance required depends of whether background 'dams' have been used to distinguish between segment in the image or not. If no dams have been used, direct adjacency is required,
+	 * while with dams the 1 pixel distance is sufficient to be considered touching.
 	 *
-	 * @param aOutline
-	 *            The list of coordinates describing the border of the original segment
-	 * @param aLabel
-	 *            The label number of the original segment to differentiate from the other segments
-	 * @param aLabelImage
-	 *            The image containing the segments drawn in their label colour
-	 * @param aCalculateDams
-	 *            Have 'dams' been used to separate the segments in the label image
+	 * @param aOutline       The list of coordinates describing the border of the original segment
+	 * @param aLabel         The label number of the original segment to differentiate from the other segments
+	 * @param aLabelImage    The image containing the segments drawn in their label colour
+	 * @param aCalculateDams Have 'dams' been used to separate the segments in the label image
 	 */
 	private static Set<Integer> computeTouchingNeighbors(final List<Coordinates> aOutline, final int aLabel, final ImagePlus aLabelImage, final boolean aCalculateDams)
 	{
@@ -317,17 +305,14 @@ public class CellMeasurer
 
 
 	/**
-	 * Collect the coordinates of all nuclei/cells based on their label and simultaneously register the gray values of these voxels. This method simply goes pixel by pixel through the labelled image and stores any non-zero pixel location it finds
-	 * under the appropriate label. The gray values are stored based on label number as well, but without any link to the pixel coordinates that produced them.
+	 * Collect the coordinates of all nuclei/cells based on their label and simultaneously register the gray values of these voxels. This method simply goes pixel by pixel through the labelled image
+	 * and stores any non-zero pixel location it finds under the appropriate label. The gray values are stored based on label number as well, but without any link to the pixel coordinates that
+	 * produced them.
 	 *
-	 * @param aOriginalImage
-	 *            The original intensity image
-	 * @param aLabelImage
-	 *            The image containing the labelled nuclei/cells
-	 * @param aLabels
-	 *            The list of available labels in the label image
-	 * @param aLabelIndices
-	 *            The index numbers for each label, to match the order of the results List with that of the labels List
+	 * @param aOriginalImage The original intensity image
+	 * @param aLabelImage    The image containing the labelled nuclei/cells
+	 * @param aLabels        The list of available labels in the label image
+	 * @param aLabelIndices  The index numbers for each label, to match the order of the results List with that of the labels List
 	 *
 	 * @return A VoxelData object containing the three lists for the outlines, the full voxel coordinates and the intensity values of each segment
 	 */
@@ -379,8 +364,7 @@ public class CellMeasurer
 	/**
 	 * Returns the set of unique labels existing in the given stack, excluding the value zero (used for background).
 	 *
-	 * @param aImage
-	 *            a 3D label image
+	 * @param aImage a 3D label image
 	 * @return the list of unique labels present in image (without background)
 	 */
 	private static int[] findAllLabels(final ImageStack aImage)
@@ -408,20 +392,20 @@ public class CellMeasurer
 		final int[] array = new int[labels.size()];
 		final Iterator<Integer> iterator = labels.iterator();
 		for (int i = 0; i < labels.size(); i++)
+		{
 			array[i] = iterator.next();
+		}
 
 		return array;
 	}
 
 
 	/**
-	 * Get a measure of the background intensity of the signal image. The background is defined as any part of the image that is not covered by the segmented image. The background measure is the median of the background intensity values excluding any
-	 * higher outliers.
+	 * Get a measure of the background intensity of the signal image. The background is defined as any part of the image that is not covered by the segmented image. The background measure is the
+	 * median of the background intensity values excluding any higher outliers.
 	 *
-	 * @param aSignalImage
-	 *            The image of the signal to be measured
-	 * @param aSegmentImage
-	 *            The image containing the foreground segments
+	 * @param aSignalImage  The image of the signal to be measured
+	 * @param aSegmentImage The image containing the foreground segments
 	 *
 	 * @return A value for an average background intensity of the signal image per slice.
 	 */
@@ -501,10 +485,8 @@ public class CellMeasurer
 	/**
 	 * Initialize the measurements by reading the input (gray scale) image and its corresponding labels.
 	 *
-	 * @param inputImage
-	 *            input (grayscale) image
-	 * @param labelImage
-	 *            label image (labels are positive integer values)
+	 * @param inputImage input (grayscale) image
+	 * @param labelImage label image (labels are positive integer values)
 	 */
 	public static Cell3D[] getMeasuredCells(final ImagePlus aDAPIInputImage, final ImagePlus aActinInputImage, final ImagePlus aDAPILabelImage, final ImagePlus aActinLabelImage,
 			final List<Labeled_Coordinate> aLabeledSeeds, final boolean[] aCalculateDams)
@@ -590,26 +572,26 @@ public class CellMeasurer
 			cells[i] = cell;
 		}
 
-		calculImage.changes = false;
-		calculImage.close();
+		if (calculImage != null)
+		{
+			calculImage.changes = false;
+			calculImage.close();
+		}
 
 		ParticleAnalyzer3D.runParticleAnalyzer3D(cells, aDAPIInputImage, aDAPILabelImage, labels);
-		MCIB3DMeasurements.setMeasurements(cells, aDAPIInputImage, aDAPILabelImage);
+//		MCIB3DMeasurements.setMeasurements(cells, aDAPIInputImage, aDAPILabelImage);
 
 		return cells;
 	}
 
 
 	/**
-	 * Measure the intensity of all relevant voxels in the image for each cell according to the measurement type given. Note that the measurement will be done in the active channel! The measured voxel intensities are summerized (by mean, median etc)
-	 * and added to the cell extra-signal measurements.
+	 * Measure the intensity of all relevant voxels in the image for each cell according to the measurement type given. Note that the measurement will be done in the active channel! The measured voxel
+	 * intensities are summerized (by mean, median etc) and added to the cell extra-signal measurements.
 	 *
-	 * @param aSignalImage
-	 *            The image to measure on
-	 * @param aMeasurement
-	 *            The type of measurement (e.g. only the nucleus or the entire cell or etc.)
-	 * @param aCells
-	 *            The list of cells to measure on.
+	 * @param aSignalImage The image to measure on
+	 * @param aMeasurement The type of measurement (e.g. only the nucleus or the entire cell or etc.)
+	 * @param aCells       The list of cells to measure on.
 	 *
 	 * @return The (median) background measure for each slice of the signal image, based on any non-cell parts of the image and excluding outlier values.
 	 */
