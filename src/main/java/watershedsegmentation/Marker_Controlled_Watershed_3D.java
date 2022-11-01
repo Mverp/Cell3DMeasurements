@@ -522,7 +522,7 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 			return;
 		}
 		// If threshold is Manual the dialogue 'DialogueThresholdSettingManual' is used to set the manual threshold
-		if (this.threshold == MANUAL && !dialogThresholdSettingManual()) // i.e. the settings for dapi == settings for actin
+		if ((this.threshold == MANUAL || this.thresholdActin == MANUAL) && !dialogThresholdSettingManual()) // i.e. the settings for dapi == settings for actin
 		{
 			return;
 		}
