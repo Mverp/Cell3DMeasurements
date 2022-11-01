@@ -30,12 +30,13 @@ import utils.GenUtils;
 // Of moet ik 2D en 3D helemaal loskoppelen?
 
 /**
- * Create a segmented image based on a set of markers points. The input is the image to be segmented and an image in which for each segment a colour-labelled point has been added (most often the output of the Marker_Image_Creator_3D). Starting from
- * the marker points, regions are grown in a thresholded version of the input image until all of the foreground that contains a marker has been claimed by one of the segments. This specific plugin assumes the input image to contain at least a channel
- * showing a nucleus-identifying signal (e.g. DAPI) and is also capable of using the markers on a complete cell-based signal (with the exception of the nucleus if need be). The latter is an option for the user to decide.
+ * Create a segmented image based on a set of markers points. The input is the image to be segmented and an image in which for each segment a colour-labelled point has been added (most often the
+ * output of the Marker_Image_Creator_3D). Starting from the marker points, regions are grown in a thresholded version of the input image until all of the foreground that contains a marker has been
+ * claimed by one of the segments. This specific plugin assumes the input image to contain at least a channel showing a nucleus-identifying signal (e.g. DAPI) and is also capable of using the markers
+ * on a complete cell-based signal (with the exception of the nucleus if need be). The latter is an option for the user to decide.
  *
- * This plugins use the following plugins: - Median filter: Fiji -> Process -> Median(3D) - Threshold: Fiji -> Image -> Adjust -> Threshold - Exact Euclidean Distance Transform: Fiji -> Process -> Exact Euclidean Distance Transform(3D) - Marker
- * Controlled Watershed: Fiji --> Plugins -> MorpholibJ
+ * This plugins use the following plugins: - Median filter: Fiji -> Process -> Median(3D) - Threshold: Fiji -> Image -> Adjust -> Threshold - Exact Euclidean Distance Transform: Fiji -> Process ->
+ * Exact Euclidean Distance Transform(3D) - Marker Controlled Watershed: Fiji --> Plugins -> MorpholibJ
  *
  * @author Esther
  */
@@ -73,10 +74,8 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 	/**
 	 * Apply the threshold that has been set by the user on a (presumably) already filtered image.
 	 *
-	 * @param aFilteredImage
-	 *            The channel image after filtering has been done already
-	 * @param aThreshold
-	 *            The thresholding method to apply
+	 * @param aFilteredImage The channel image after filtering has been done already
+	 * @param aThreshold     The thresholding method to apply
 	 */
 	private void applyThreshold(final ImagePlus aFilteredImage, final String aThreshold)
 	{
@@ -188,8 +187,7 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 	/**
 	 * Ask the user to select the marker image.
 	 *
-	 * @param aNames
-	 *            The list of images available
+	 * @param aNames The list of images available
 	 *
 	 * @return The image if one has been chosen, null otherwise (none chosen or cancelled)
 	 */
@@ -217,8 +215,7 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 	/**
 	 * Ask the user to select the original image from the list of open images.
 	 *
-	 * @param aNames
-	 *            The names of the available images
+	 * @param aNames The names of the available images
 	 * @return True if the dialog was ok-ed, false if not
 	 */
 	private boolean dialogOriginalImage(final String[] aNames)
@@ -240,8 +237,9 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 
 
 	/**
-	 * Ask the user to select the which threshold and filter method must be used to prepare the image for the segmentation. The user can select different options for the nucleus and cell images. Also allows the user to include 'dams' in the watershed
-	 * image (choice made per channel). Dams are a minimal 1 zero value pixel division between all segments. Using dams really helps visibility at the cost of slightly small segments.
+	 * Ask the user to select the which threshold and filter method must be used to prepare the image for the segmentation. The user can select different options for the nucleus and cell images. Also
+	 * allows the user to include 'dams' in the watershed image (choice made per channel). Dams are a minimal 1 zero value pixel division between all segments. Using dams really helps visibility at
+	 * the cost of slightly small segments.
 	 *
 	 * @return True if the dialog has been OK-ed, false otherwise.
 	 */
@@ -335,12 +333,9 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 	/**
 	 * Do the preparation before the segmentation. Filter and threshold the input images to reduce noise and to get a starting point for the watershed.
 	 *
-	 * @param aChannel
-	 *            The number of the channel that needs to be prepared
-	 * @param aFilter
-	 *            The name of the filter to apply
-	 * @param aThreshold
-	 *            The name of the threshold method to use
+	 * @param aChannel   The number of the channel that needs to be prepared
+	 * @param aFilter    The name of the filter to apply
+	 * @param aThreshold The name of the threshold method to use
 	 *
 	 * @return A (duplicated) filtered and thresholded image of just the selected channel.
 	 */
@@ -411,8 +406,9 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 	{
 		IJ.log("   Start Distance Map");
 		ImagePlus originalImageDistance;
-		final String subTitleMedian = GenUtils.getTitleNoExtension(aImage);
-		final String inputDistance = "map=EDT image=" + subTitleMedian + " mask=None threshold=1 inverse";
+		String subTitleMedian = GenUtils.getTitleNoExtension(aImage);
+		subTitleMedian = subTitleMedian.replace(" ", "");
+		final String inputDistance = "map=EDT image=[" + subTitleMedian + "] mask=Same threshold=1 inverse";
 		IJ.run("3D Distance Map", inputDistance);
 		do
 		{
@@ -421,12 +417,12 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 		IJ.log("   End Distance Map");
 
 		// Input strings for the marker-controlled watershed
-		final String maskName = "mask=" + aImage.getShortTitle();
-		final String inputName = "input=" + originalImageDistance.getShortTitle();
+		final String maskName = "mask=[" + aImage.getTitle() + "]";
+		final String inputName = "input=[" + originalImageDistance.getTitle() + "]";
 
 		// For each marker image a marker-controlled watershed is performed
 		IJ.log("   Marker-Controlled Watershed " + aMarkerImage.getShortTitle());
-		final String markerName = "marker=" + aMarkerImage.getShortTitle();
+		final String markerName = "marker=[" + aMarkerImage.getTitle() + "]";
 		String options = "use";
 		if (aCalculateDams)
 		{
@@ -466,8 +462,7 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 	/**
 	 * A small bit of code to show the threshold values of the different auto-threshold methods on an image stack.
 	 *
-	 * @param aImage
-	 *            The ImagePlus to be thresholded
+	 * @param aImage The ImagePlus to be thresholded
 	 */
 	private void reportStackThresholds(final ImagePlus aImage)
 	{
@@ -581,10 +576,10 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 
 
 	/**
-	 * Select the channel of the input image in which the nucleus signal can be found. This is also the dialog in which the user can opt to segment a cell-wide signal. If the user chooses so, a channel for the cell signal must also be given.
+	 * Select the channel of the input image in which the nucleus signal can be found. This is also the dialog in which the user can opt to segment a cell-wide signal. If the user chooses so, a
+	 * channel for the cell signal must also be given.
 	 *
-	 * @param aInputImage
-	 *            The image in which at least the nucleus signal is present. The cell signal should be in another channel of this image as well if it is to be used.
+	 * @param aInputImage The image in which at least the nucleus signal is present. The cell signal should be in another channel of this image as well if it is to be used.
 	 *
 	 * @return Was the channel dialog ok-ed (true) or not (false)
 	 */
@@ -626,8 +621,7 @@ public class Marker_Controlled_Watershed_3D implements PlugIn
 	/**
 	 * Store the parameters of the Marker_Controlled_Watershed_3D in the working directory.
 	 *
-	 * @param aWorkingDir
-	 *            The path to the working directory.
+	 * @param aWorkingDir The path to the working directory.
 	 */
 	private void storeUsedParameters(final File aWorkingDir)
 	{
